@@ -1,0 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Trip {
+  id               String    @id @default(uuid())
+  riderId          String
+  driverId         String?
+  vehicleType      String
+  status           String
+  city             String
+
+  // Origin
+  originLat        Float
+  originLng        Float
+  originH3Res9     String
+
+  // Destination
+  destLat          Float
+  destLng          Float
+  destH3Res9       String
+
+  // Timestamps
+  requestedAt      DateTime  @default(now())
+  offeredAt        DateTime?
+  assignedAt       DateTime?
+  pickupStartedAt  DateTime?
+  inProgressAt     DateTime?
+  completedAt      DateTime?
+  paidAt           DateTime?
+
+  // Pricing
+  quoteId          String?
+  pricingSnapshot  Json?
+  paymentIntentId  String?
+
+  // Metrics
+  distance_m_est   Float?
+  duration_s_est   Float?
+  distance_m_final Float?
+  duration_s_final Float?
+
+  // Cancellation
+  cancelReason     String?
+  cancelSide       String?
+  cancelAt         DateTime?
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  points           TripPoint[]
+  audits           TripAudit[]
+  cancellation     TripCancellation?
+
+  @@index([riderId])
+  @@index([driverId])
+  @@index([status])
+  @@index([city])
+  @@index([requestedAt])
+}
+
+model TripPoint {
+  id        String   @id @default(uuid())
+  tripId    String
+  lat       Float
+  lng       Float
+  timestamp DateTime @default(now())
+  source    String   // driver|rider|system
+  metadata  Json?
+
+  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@index([timestamp])
+}
+
+model TripAudit {
+  id              String   @id @default(uuid())
+  tripId          String
+  action          String
+  previousStatus  String?
+  newStatus       String
+  performedBy     String
+  performedByType String   // rider|driver|system
+  metadata        Json?
+  timestamp       DateTime @default(now())
+
+  trip            Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([tripId])
+  @@index([timestamp])
+}
+
+model TripCancellation {
+  id              String   @id @default(uuid())
+  tripId          String   @unique
+  reason          String
+  side            String
+  notes           String?
+  compensationPct Float?
+  timestamp       DateTime @default(now())
+
+  trip            Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+
+  @@index([reason])
+  @@index([side])
+}
