@@ -19,64 +19,41 @@ let PricingClient = PricingClient_1 = class PricingClient {
     configService;
     logger = new common_1.Logger(PricingClient_1.name);
     baseUrl;
-    timeout = 5000;
     constructor(httpService, configService) {
         this.httpService = httpService;
         this.configService = configService;
         this.baseUrl = this.configService.get('PRICING_SERVICE_URL') || 'http://localhost:3006';
     }
-    getErrorMessage(error) {
-        if (error instanceof Error)
-            return error.message;
-        return String(error);
-    }
-    getErrorStack(error) {
-        if (error instanceof Error)
-            return error.stack;
-        return undefined;
-    }
-    async quoteTrip(request) {
+    async quote(request) {
         try {
-            this.logger.debug(`Requesting quote for trip: ${request.city}, ${request.vehicleType}`);
-            const response = await this.httpService.post(`${this.baseUrl}/pricing/quote`, request, { timeout: this.timeout });
-            if (!response.quoteId || !response.pricingDetails) {
+            this.logger.debug(`Requesting quote for rider: ${request.riderId}, vehicle: ${request.vehicleType}`);
+            const response = await this.httpService.post(`${this.baseUrl}/pricing/quote`, request);
+            if (!response.quoteId || !response.totalPrice) {
                 throw new Error('Invalid quote response: missing required fields');
             }
-            this.logger.debug(`Quote received: ${response.quoteId}, total: ${response.pricingDetails.totalPrice}`);
+            this.logger.debug(`Quote received: ${response.quoteId}, total: ${response.totalPrice} ${response.currency}`);
             return response;
         }
         catch (error) {
-            this.logger.error(`Failed to get pricing quote: ${this.getErrorMessage(error)}`, this.getErrorStack(error));
-            throw new Error(`Pricing service unavailable: ${this.getErrorMessage(error)}`);
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to get pricing quote: ${message}`);
+            throw new Error(`Pricing service quote failed: ${message}`);
         }
     }
-    async finalizeTrip(request) {
+    async finalize(request) {
         try {
-            this.logger.debug(`Finalizing pricing for trip: ${request.tripId}, canceled: ${request.cancel?.is_canceled || false}`);
-            const response = await this.httpService.post(`${this.baseUrl}/pricing/finalize`, request, { timeout: this.timeout });
-            if (!response.finalSnapshot || !response.quoteId) {
+            this.logger.debug(`Finalizing pricing for trip: ${request.tripId}, quote: ${request.quoteId}`);
+            const response = await this.httpService.post(`${this.baseUrl}/pricing/finalize`, request);
+            if (typeof response.finalPrice !== 'number' || !response.currency) {
                 throw new Error('Invalid finalize response: missing required fields');
             }
-            this.logger.debug(`Pricing finalized: ${response.quoteId}, total: ${response.finalSnapshot.totalPrice}`);
-            if (response.cancelFee) {
-                this.logger.debug(`Cancel fee applied: ${response.cancelFee.cancelFeeApplied}, free: ${response.cancelFee.isFreeCancel}`);
-            }
+            this.logger.debug(`Pricing finalized: ${response.finalPrice} ${response.currency}`);
             return response;
         }
         catch (error) {
-            this.logger.error(`Failed to finalize pricing: ${this.getErrorMessage(error)}`, this.getErrorStack(error));
-            throw new Error(`Pricing finalize failed: ${this.getErrorMessage(error)}`);
-        }
-    }
-    async validateQuote(quoteId) {
-        try {
-            this.logger.debug(`Validating quote: ${quoteId}`);
-            const response = await this.httpService.get(`${this.baseUrl}/pricing/quote/${quoteId}/validate`, { timeout: this.timeout });
-            return response.valid;
-        }
-        catch (error) {
-            this.logger.warn(`Quote validation failed for ${quoteId}: ${this.getErrorMessage(error)}`);
-            return false;
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`Failed to finalize pricing: ${message}`);
+            throw new Error(`Pricing service finalize failed: ${message}`);
         }
     }
 };
