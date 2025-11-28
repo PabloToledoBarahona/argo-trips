@@ -1,14 +1,14 @@
 import { RedisService } from '../../../shared/redis/redis.service.js';
-export interface Timer {
-    tripId: string;
-    type: 'no_show' | 'offer_expiration' | 'pickup_timeout';
-    expiresAt: Date;
-}
 export declare class TimerService {
     private readonly redisService;
+    private readonly logger;
     constructor(redisService: RedisService);
-    setTimer(timer: Timer): Promise<void>;
-    getTimer(tripId: string, type: Timer['type']): Promise<Timer | null>;
-    cancelTimer(tripId: string, type: Timer['type']): Promise<void>;
-    hasExpired(tripId: string, type: Timer['type']): Promise<boolean>;
+    setOfferExpiry(tripId: string, expirySeconds: number): Promise<void>;
+    isOfferExpired(tripId: string): Promise<boolean>;
+    clearOfferExpiry(tripId: string): Promise<void>;
+    setRiderNoShow(tripId: string, noShowSeconds: number): Promise<void>;
+    isRiderNoShow(tripId: string): Promise<boolean>;
+    setDriverNoShow(tripId: string, noShowSeconds: number): Promise<void>;
+    isDriverNoShow(tripId: string): Promise<boolean>;
+    clearNoShow(tripId: string): Promise<void>;
 }
