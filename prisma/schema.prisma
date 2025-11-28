@@ -1,112 +1,147 @@
-generator client {
-  provider = "prisma-client-js"
-}
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum TripStatus {
+  REQUESTED
+  OFFERED
+  ASSIGNED
+  PICKUP_STARTED
+  IN_PROGRESS
+  COMPLETED
+  PAID
+  CANCELED
+}
+
+enum TripCancelReason {
+  RIDER_CANCELLED
+  DRIVER_CANCELLED
+  NO_SHOW
+  SYSTEM_TIMEOUT
+  REASSIGN_EXHAUSTED
+}
+
+enum TripCancelSide {
+  rider
+  driver
+  system
+}
+
+enum TripPointPhase {
+  pickup
+  in_progress
+}
+
+enum ActorType {
+  rider
+  driver
+  system
+}
+
 model Trip {
-  id               String    @id @default(uuid())
-  riderId          String
-  driverId         String?
-  vehicleType      String
-  status           String
-  city             String
+  id          String  @id @default(cuid())
+  riderId     String  @map("rider_id")
+  driverId    String? @map("driver_id")
+  vehicleType String  @map("vehicle_type")
 
-  // Origin
-  originLat        Float
-  originLng        Float
-  originH3Res9     String
+  status TripStatus
 
-  // Destination
-  destLat          Float
-  destLng          Float
-  destH3Res9       String
+  city String
 
-  // Timestamps
-  requestedAt      DateTime  @default(now())
-  offeredAt        DateTime?
-  assignedAt       DateTime?
-  pickupStartedAt  DateTime?
-  inProgressAt     DateTime?
-  completedAt      DateTime?
-  paidAt           DateTime?
+  originLat    Float  @map("origin_lat")
+  originLng    Float  @map("origin_lng")
+  originH3Res9 String @map("origin_h3_res9")
 
-  // Pricing
-  quoteId          String?
-  pricingSnapshot  Json?
-  paymentIntentId  String?
+  destLat    Float  @map("dest_lat")
+  destLng    Float  @map("dest_lng")
+  destH3Res9 String @map("dest_h3_res9")
 
-  // Metrics
-  distance_m_est   Float?
-  duration_s_est   Float?
-  distance_m_final Float?
-  duration_s_final Float?
+  requestedAt     DateTime  @map("requested_at")
+  offeredAt       DateTime? @map("offered_at")
+  assignedAt      DateTime? @map("assigned_at")
+  pickupStartedAt DateTime? @map("pickup_started_at")
+  inProgressAt    DateTime? @map("in_progress_at")
+  completedAt     DateTime? @map("completed_at")
+  paidAt          DateTime? @map("paid_at")
 
-  // Cancellation
-  cancelReason     String?
-  cancelSide       String?
-  cancelAt         DateTime?
+  quoteId         String? @map("quote_id")
+  pricingSnapshot Json?   @map("pricing_snapshot")
+  paymentIntentId String? @map("payment_intent_id")
 
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  distanceMEst   Int? @map("distance_m_est")
+  durationSEst   Int? @map("duration_s_est")
+  distanceMFinal Int? @map("distance_m_final")
+  durationSFinal Int? @map("duration_s_final")
 
-  points           TripPoint[]
-  audits           TripAudit[]
-  cancellation     TripCancellation?
+  cancelReason TripCancelReason? @map("cancel_reason")
+  cancelSide   TripCancelSide?   @map("cancel_side")
+  cancelAt     DateTime?         @map("cancel_at")
 
-  @@index([riderId])
-  @@index([driverId])
-  @@index([status])
-  @@index([city])
-  @@index([requestedAt])
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  points        TripPoint[]
+  audits        TripAudit[]
+  cancellations TripCancellation[]
+
+  @@index([riderId, requestedAt], map: "idx_trips_rider_requested_at")
+  @@index([driverId, status], map: "idx_trips_driver_status")
 }
 
 model TripPoint {
-  id        String   @id @default(uuid())
-  tripId    String
-  lat       Float
-  lng       Float
-  timestamp DateTime @default(now())
-  source    String   // driver|rider|system
-  metadata  Json?
+  id     String @id @default(cuid())
+  tripId String @map("trip_id")
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
-  trip      Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  phase TripPointPhase
 
-  @@index([tripId])
-  @@index([timestamp])
+  lat    Float
+  lng    Float
+  h3Res9 String @map("h3_res9")
+
+  speedMps   Float? @map("speed_mps")
+  headingDeg Float? @map("heading_deg")
+
+  ts DateTime
+
+  @@index([tripId, ts], map: "idx_trip_points_trip_ts")
 }
 
 model TripAudit {
-  id              String   @id @default(uuid())
-  tripId          String
-  action          String
-  previousStatus  String?
-  newStatus       String
-  performedBy     String
-  performedByType String   // rider|driver|system
-  metadata        Json?
-  timestamp       DateTime @default(now())
+  id     String @id @default(cuid())
+  tripId String @map("trip_id")
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
-  trip            Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  action    String
+  actorType ActorType @map("actor_type")
+  actorId   String?   @map("actor_id")
 
-  @@index([tripId])
-  @@index([timestamp])
+  payload Json
+  ip      String? @map("ip")
+
+  ts DateTime @default(now())
+
+  @@index([tripId, ts], map: "idx_trip_audit_trip_ts")
 }
 
 model TripCancellation {
-  id              String   @id @default(uuid())
-  tripId          String   @unique
-  reason          String
-  side            String
-  notes           String?
-  compensationPct Float?
-  timestamp       DateTime @default(now())
+  id     String @id @default(cuid())
+  tripId String @map("trip_id")
+  trip   Trip   @relation(fields: [tripId], references: [id], onDelete: Cascade)
 
-  trip            Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  side   TripCancelSide   @map("side")
+  reason TripCancelReason @map("reason")
 
-  @@index([reason])
-  @@index([side])
+  secondsSinceAssign Int?     @map("seconds_since_assign")
+  feeAppliedDec      Decimal? @map("fee_applied_dec")
+
+  ts DateTime @default(now())
+
+  @@index([tripId, ts], map: "idx_trip_cancellations_trip_ts")
 }
