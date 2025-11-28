@@ -12,16 +12,67 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TripCancellationsPrismaRepository = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_js_1 = require("./prisma.service.js");
+const client_1 = require("@prisma/client");
+const cancel_reason_enum_js_1 = require("../../../domain/enums/cancel-reason.enum.js");
+const cancel_side_enum_js_1 = require("../../../domain/enums/cancel-side.enum.js");
 let TripCancellationsPrismaRepository = class TripCancellationsPrismaRepository {
     prisma;
     constructor(prisma) {
         this.prisma = prisma;
     }
     async create(cancellation) {
-        throw new Error('Not implemented');
+        const prismaCancellation = await this.prisma.tripCancellation.create({
+            data: {
+                tripId: cancellation.tripId,
+                side: this.mapCancelSideToPrisma(cancellation.side),
+                reason: this.mapCancelReasonToPrisma(cancellation.reason),
+                secondsSinceAssign: cancellation.secondsSinceAssign,
+                feeAppliedDec: cancellation.feeAppliedDec,
+            },
+        });
+        return {
+            id: prismaCancellation.id,
+            tripId: prismaCancellation.tripId,
+            side: prismaCancellation.side,
+            reason: prismaCancellation.reason,
+            secondsSinceAssign: prismaCancellation.secondsSinceAssign ?? undefined,
+            feeAppliedDec: prismaCancellation.feeAppliedDec ? Number(prismaCancellation.feeAppliedDec) : undefined,
+            ts: prismaCancellation.ts,
+        };
     }
     async findByTripId(tripId) {
-        throw new Error('Not implemented');
+        const prismaCancellations = await this.prisma.tripCancellation.findMany({
+            where: { tripId },
+            orderBy: { ts: 'desc' },
+        });
+        return prismaCancellations.map(cancellation => ({
+            id: cancellation.id,
+            tripId: cancellation.tripId,
+            side: cancellation.side,
+            reason: cancellation.reason,
+            secondsSinceAssign: cancellation.secondsSinceAssign ?? undefined,
+            feeAppliedDec: cancellation.feeAppliedDec ? Number(cancellation.feeAppliedDec) : undefined,
+            ts: cancellation.ts,
+        }));
+    }
+    mapCancelSideToPrisma(side) {
+        if (side === cancel_side_enum_js_1.CancelSide.RIDER || side === 'rider')
+            return client_1.TripCancelSide.rider;
+        if (side === cancel_side_enum_js_1.CancelSide.DRIVER || side === 'driver')
+            return client_1.TripCancelSide.driver;
+        if (side === cancel_side_enum_js_1.CancelSide.SYSTEM || side === 'system')
+            return client_1.TripCancelSide.system;
+        return client_1.TripCancelSide.system;
+    }
+    mapCancelReasonToPrisma(reason) {
+        const reasonMap = {
+            [cancel_reason_enum_js_1.CancelReason.RIDER_CANCELLED]: client_1.TripCancelReason.RIDER_CANCELLED,
+            [cancel_reason_enum_js_1.CancelReason.DRIVER_CANCELLED]: client_1.TripCancelReason.DRIVER_CANCELLED,
+            [cancel_reason_enum_js_1.CancelReason.NO_SHOW]: client_1.TripCancelReason.NO_SHOW,
+            [cancel_reason_enum_js_1.CancelReason.SYSTEM_TIMEOUT]: client_1.TripCancelReason.SYSTEM_TIMEOUT,
+            [cancel_reason_enum_js_1.CancelReason.REASSIGN_EXHAUSTED]: client_1.TripCancelReason.REASSIGN_EXHAUSTED,
+        };
+        return reasonMap[reason] || client_1.TripCancelReason.SYSTEM_TIMEOUT;
     }
 };
 exports.TripCancellationsPrismaRepository = TripCancellationsPrismaRepository;

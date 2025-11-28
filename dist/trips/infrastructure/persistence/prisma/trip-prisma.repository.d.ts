@@ -8,4 +8,11 @@ export declare class TripPrismaRepository {
     update(id: string, trip: Partial<Trip>): Promise<Trip>;
     findByRiderId(riderId: string): Promise<Trip[]>;
     findByDriverId(driverId: string): Promise<Trip[]>;
+    private mapToDomain;
+    private mapStatusToPrisma;
+    private mapStatusToDomain;
+    private mapCancelReasonToPrisma;
+    private mapCancelReasonToDomain;
+    private mapCancelSideToPrisma;
+    private mapCancelSideToDomain;
 }

@@ -12,16 +12,57 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TripAuditPrismaRepository = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_js_1 = require("./prisma.service.js");
+const client_1 = require("@prisma/client");
 let TripAuditPrismaRepository = class TripAuditPrismaRepository {
     prisma;
     constructor(prisma) {
         this.prisma = prisma;
     }
     async create(audit) {
-        throw new Error('Not implemented');
+        const prismaAudit = await this.prisma.tripAudit.create({
+            data: {
+                tripId: audit.tripId,
+                action: audit.action,
+                actorType: this.mapActorTypeToPrisma(audit.actorType),
+                actorId: audit.actorId,
+                payload: audit.payload,
+                ip: audit.ip,
+            },
+        });
+        return {
+            id: prismaAudit.id,
+            tripId: prismaAudit.tripId,
+            action: prismaAudit.action,
+            actorType: prismaAudit.actorType,
+            actorId: prismaAudit.actorId ?? undefined,
+            payload: prismaAudit.payload,
+            ip: prismaAudit.ip ?? undefined,
+            ts: prismaAudit.ts,
+        };
     }
     async findByTripId(tripId) {
-        throw new Error('Not implemented');
+        const prismaAudits = await this.prisma.tripAudit.findMany({
+            where: { tripId },
+            orderBy: { ts: 'asc' },
+        });
+        return prismaAudits.map(audit => ({
+            id: audit.id,
+            tripId: audit.tripId,
+            action: audit.action,
+            actorType: audit.actorType,
+            actorId: audit.actorId ?? undefined,
+            payload: audit.payload,
+            ip: audit.ip ?? undefined,
+            ts: audit.ts,
+        }));
+    }
+    mapActorTypeToPrisma(actorType) {
+        const typeMap = {
+            'rider': client_1.ActorType.rider,
+            'driver': client_1.ActorType.driver,
+            'system': client_1.ActorType.system,
+        };
+        return typeMap[actorType] || client_1.ActorType.system;
     }
 };
 exports.TripAuditPrismaRepository = TripAuditPrismaRepository;
