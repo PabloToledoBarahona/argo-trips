@@ -11,39 +11,40 @@ export class TripPrismaRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(trip: Trip): Promise<Trip> {
-    const prismaTrip = await this.prisma.trip.create({
-      data: {
-        id: trip.id,
-        riderId: trip.riderId,
-        driverId: trip.driverId,
-        vehicleType: trip.vehicleType,
-        status: this.mapStatusToPrisma(trip.status),
-        city: trip.city,
-        originLat: trip.originLat,
-        originLng: trip.originLng,
-        originH3Res9: trip.originH3Res9,
-        destLat: trip.destLat,
-        destLng: trip.destLng,
-        destH3Res9: trip.destH3Res9,
-        requestedAt: trip.requestedAt,
-        offeredAt: trip.offeredAt,
-        assignedAt: trip.assignedAt,
-        pickupStartedAt: trip.pickupStartedAt,
-        inProgressAt: trip.inProgressAt,
-        completedAt: trip.completedAt,
-        paidAt: trip.paidAt,
-        quoteId: trip.quoteId,
-        pricingSnapshot: trip.pricingSnapshot as any,
-        paymentIntentId: trip.paymentIntentId,
-        distanceMEst: trip.distance_m_est,
-        durationSEst: trip.duration_s_est,
-        distanceMFinal: trip.distance_m_final,
-        durationSFinal: trip.duration_s_final,
-        cancelReason: trip.cancelReason ? this.mapCancelReasonToPrisma(trip.cancelReason) : null,
-        cancelSide: trip.cancelSide ? this.mapCancelSideToPrisma(trip.cancelSide) : null,
-        cancelAt: trip.cancelAt,
-      },
-    });
+    const data: any = {
+      id: trip.id,
+      riderId: trip.riderId,
+      driverId: trip.driverId,
+      vehicleType: trip.vehicleType,
+      status: this.mapStatusToPrisma(trip.status),
+      city: trip.city,
+      originLat: trip.originLat,
+      originLng: trip.originLng,
+      originH3Res9: trip.originH3Res9,
+      destLat: trip.destLat,
+      destLng: trip.destLng,
+      destH3Res9: trip.destH3Res9,
+      requestedAt: trip.requestedAt,
+      offeredAt: trip.offeredAt,
+      assignedAt: trip.assignedAt,
+      pickupStartedAt: trip.pickupStartedAt,
+      inProgressAt: trip.inProgressAt,
+      completedAt: trip.completedAt,
+      paidAt: trip.paidAt,
+      quoteId: trip.quoteId,
+      cancelReason: trip.cancelReason ? this.mapCancelReasonToPrisma(trip.cancelReason) : null,
+      cancelSide: trip.cancelSide ? this.mapCancelSideToPrisma(trip.cancelSide) : null,
+      cancelAt: trip.cancelAt,
+    };
+
+    if (trip.pricingSnapshot !== undefined) data.pricingSnapshot = trip.pricingSnapshot as any;
+    if (trip.paymentIntentId !== undefined) data.paymentIntentId = trip.paymentIntentId;
+    if (trip.distance_m_est !== undefined) data.distanceMEst = trip.distance_m_est;
+    if (trip.duration_s_est !== undefined) data.durationSEst = trip.duration_s_est;
+    if (trip.distance_m_final !== undefined) data.distanceMFinal = trip.distance_m_final;
+    if (trip.duration_s_final !== undefined) data.durationSFinal = trip.duration_s_final;
+
+    const prismaTrip = await this.prisma.trip.create({ data });
 
     return this.mapToDomain(prismaTrip);
   }

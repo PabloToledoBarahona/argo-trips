@@ -11,4 +11,6 @@ export declare class CreateTripUseCase {
     private readonly logger;
     constructor(tripRepository: TripPrismaRepository, auditRepository: TripAuditPrismaRepository, geoClient: GeoClient, pricingClient: PricingClient);
     execute(dto: CreateTripDto): Promise<CreateTripResponseDto>;
+    private buildQuoteSnapshot;
+    private formatError;
 }

@@ -17,6 +17,7 @@ const trip_audit_prisma_repository_js_1 = require("../../infrastructure/persiste
 const pricing_client_js_1 = require("../../infrastructure/http-clients/pricing.client.js");
 const payments_client_js_1 = require("../../infrastructure/http-clients/payments.client.js");
 const trip_status_enum_js_1 = require("../../domain/enums/trip-status.enum.js");
+const vehicle_type_mapper_js_1 = require("../shared/vehicle-type.mapper.js");
 let CompleteTripUseCase = CompleteTripUseCase_1 = class CompleteTripUseCase {
     tripRepository;
     auditRepository;
@@ -43,13 +44,25 @@ let CompleteTripUseCase = CompleteTripUseCase_1 = class CompleteTripUseCase {
         }
         const distance_m_final = dto.distance_m_final ?? trip.distance_m_est ?? 0;
         const duration_s_final = dto.duration_s_final ?? trip.duration_s_est ?? 0;
-        const finalPricing = await this.pricingClient.finalize({
-            quoteId: trip.quoteId,
-            tripId: trip.id,
-        });
+        const pricingVehicleType = (0, vehicle_type_mapper_js_1.mapToPricingVehicleType)(trip.vehicleType);
+        let finalPricing;
+        try {
+            finalPricing = await this.pricingClient.finalize({
+                quoteId: trip.quoteId,
+                tripId: trip.id,
+                city: trip.city,
+                vehicleType: pricingVehicleType,
+                distance_m_final,
+                duration_s_final,
+            });
+        }
+        catch (error) {
+            this.logger.error(`Pricing finalize failed for trip ${trip.id}: ${this.formatError(error)}`);
+            throw new common_1.BadRequestException('Unable to finalize trip pricing');
+        }
         const paymentIntent = await this.paymentsClient.createIntent({
             tripId: trip.id,
-            amount: finalPricing.finalPrice,
+            amount: finalPricing.totalPrice,
             currency: finalPricing.currency,
             method: 'card',
         });
@@ -60,17 +73,7 @@ let CompleteTripUseCase = CompleteTripUseCase_1 = class CompleteTripUseCase {
             distance_m_final,
             duration_s_final,
             paymentIntentId: paymentIntent.paymentIntentId,
-            pricingSnapshot: {
-                basePrice: trip.pricingSnapshot?.basePrice ?? finalPricing.finalPrice,
-                surgeMultiplier: finalPricing.breakdown.dynamicMultiplier,
-                totalPrice: finalPricing.finalPrice,
-                currency: finalPricing.currency,
-                breakdown: {
-                    distancePrice: finalPricing.breakdown.distancePrice,
-                    timePrice: finalPricing.breakdown.timePrice,
-                    serviceFee: finalPricing.breakdown.serviceFee,
-                },
-            },
+            pricingSnapshot: this.buildFinalizeSnapshot(finalPricing),
         });
         await this.auditRepository.create({
             tripId: trip.id,
@@ -82,11 +85,13 @@ let CompleteTripUseCase = CompleteTripUseCase_1 = class CompleteTripUseCase {
                 newStatus: trip_status_enum_js_1.TripStatus.COMPLETED,
                 distance_m_final,
                 duration_s_final,
-                finalPrice: finalPricing.finalPrice,
+                finalPrice: finalPricing.totalPrice,
+                quoteId: trip.quoteId,
+                surgeMultiplier: finalPricing.surgeMultiplier,
                 paymentIntentId: paymentIntent.paymentIntentId,
             },
         });
-        this.logger.log(`Trip ${dto.tripId} completed, final price: ${finalPricing.finalPrice} ${finalPricing.currency}, payment intent: ${paymentIntent.paymentIntentId}`);
+        this.logger.log(`Trip ${dto.tripId} completed (quote ${trip.quoteId}), final price: ${finalPricing.totalPrice} ${finalPricing.currency}, surge=${finalPricing.surgeMultiplier}, payment intent: ${paymentIntent.paymentIntentId}`);
         return {
             id: updatedTrip.id,
             status: updatedTrip.status,
@@ -94,6 +99,28 @@ let CompleteTripUseCase = CompleteTripUseCase_1 = class CompleteTripUseCase {
             distance_m_final: updatedTrip.distance_m_final,
             duration_s_final: updatedTrip.duration_s_final,
         };
+    }
+    buildFinalizeSnapshot(finalPricing) {
+        const breakdown = finalPricing.breakdown ?? {
+            distancePrice: 0,
+            timePrice: 0,
+            serviceFee: 0,
+        };
+        return {
+            basePrice: finalPricing.basePrice,
+            surgeMultiplier: finalPricing.surgeMultiplier,
+            totalPrice: finalPricing.totalPrice,
+            currency: finalPricing.currency,
+            breakdown: {
+                distancePrice: breakdown.distancePrice ?? 0,
+                timePrice: breakdown.timePrice ?? 0,
+                serviceFee: breakdown.serviceFee ?? 0,
+                specialCharges: breakdown.specialCharges,
+            },
+        };
+    }
+    formatError(error) {
+        return error instanceof Error ? error.message : String(error);
     }
 };
 exports.CompleteTripUseCase = CompleteTripUseCase;

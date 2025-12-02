@@ -2,12 +2,25 @@ import { TripStatus } from '../enums/trip-status.enum.js';
 import { CancelReason } from '../enums/cancel-reason.enum.js';
 import { CancelSide } from '../enums/cancel-side.enum.js';
 
+export interface SpecialChargeSnapshot {
+  type: string;
+  amount: number;
+  description?: string;
+}
+
+export interface PricingBreakdownSnapshot {
+  distancePrice: number;
+  timePrice: number;
+  serviceFee: number;
+  specialCharges?: SpecialChargeSnapshot[];
+}
+
 export interface PricingSnapshot {
   basePrice: number;
   surgeMultiplier: number;
   totalPrice: number;
   currency: string;
-  breakdown?: Record<string, number>;
+  breakdown: PricingBreakdownSnapshot;
 }
 
 export class Trip {

@@ -11,7 +11,7 @@ export interface Actor {
 export interface PricingResult {
   snapshot: PricingSnapshot;
   quoteId: string;
-  totalFinal: number;
+  totalPrice: number;
 }
 
 export interface PaymentResult {

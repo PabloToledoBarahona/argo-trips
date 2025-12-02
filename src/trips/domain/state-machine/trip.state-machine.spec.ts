@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { TripStateMachine } from './trip.state-machine.js';
+import { TripStateMachine } from './trip.state-machine';
 import { Trip } from '../entities/trip.entity.js';
 import { TripStatus } from '../enums/trip-status.enum.js';
 import { TripCommand } from '../types/trip-command.type.js';

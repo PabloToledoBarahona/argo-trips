@@ -24,6 +24,7 @@ export interface H3Request {
     lng: number;
 }
 export interface H3Response {
+    h3_res7?: string;
     h3_res9: string;
 }
 export declare class GeoClient {

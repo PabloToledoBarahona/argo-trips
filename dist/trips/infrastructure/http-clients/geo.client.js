@@ -60,10 +60,10 @@ let GeoClient = GeoClient_1 = class GeoClient {
         try {
             this.logger.debug(`Converting coordinates to H3: (${lat},${lng})`);
             const response = await this.httpService.post(`${this.baseUrl}/geo/h3`, { lat, lng });
-            if (!response.h3_res9) {
-                throw new Error('Invalid H3 response: missing h3_res9 field');
+            if (!response.h3_res9 && !response.h3_res7) {
+                throw new Error('Invalid H3 response: missing h3 index fields');
             }
-            this.logger.debug(`H3 index: ${response.h3_res9}`);
+            this.logger.debug(`H3 index res9=${response.h3_res9}, res7=${response.h3_res7 ?? 'n/a'}`);
             return response;
         }
         catch (error) {

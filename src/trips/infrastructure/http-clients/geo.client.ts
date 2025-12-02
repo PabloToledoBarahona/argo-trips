@@ -48,6 +48,7 @@ export interface H3Request {
 }
 
 export interface H3Response {
+  h3_res7?: string;
   h3_res9: string;
 }
 
@@ -158,11 +159,13 @@ export class GeoClient {
         { lat, lng },
       );
 
-      if (!response.h3_res9) {
-        throw new Error('Invalid H3 response: missing h3_res9 field');
+      if (!response.h3_res9 && !response.h3_res7) {
+        throw new Error('Invalid H3 response: missing h3 index fields');
       }
 
-      this.logger.debug(`H3 index: ${response.h3_res9}`);
+      this.logger.debug(
+        `H3 index res9=${response.h3_res9}, res7=${response.h3_res7 ?? 'n/a'}`,
+      );
 
       return response;
     } catch (error) {
