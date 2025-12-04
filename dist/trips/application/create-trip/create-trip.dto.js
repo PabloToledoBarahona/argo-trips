@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CreateTripResponseDto = exports.CreateTripDto = void 0;
+exports.CreateTripResponseDto = exports.PricingBreakdownDto = exports.CreateTripDto = void 0;
 const class_validator_1 = require("class-validator");
 class CreateTripDto {
     riderId;
@@ -72,12 +72,27 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
 ], CreateTripDto.prototype, "destH3Res9", void 0);
+class PricingBreakdownDto {
+    distancePrice;
+    timePrice;
+    serviceFee;
+    specialCharges;
+}
+exports.PricingBreakdownDto = PricingBreakdownDto;
 class CreateTripResponseDto {
     id;
     status;
     riderId;
     vehicleType;
     requestedAt;
+    quoteId;
+    estimateTotal;
+    basePrice;
+    surgeMultiplier;
+    currency;
+    breakdown;
+    distanceMeters;
+    durationSeconds;
 }
 exports.CreateTripResponseDto = CreateTripResponseDto;
 //# sourceMappingURL=create-trip.dto.js.map

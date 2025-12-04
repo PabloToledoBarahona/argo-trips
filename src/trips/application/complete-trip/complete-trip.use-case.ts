@@ -112,6 +112,17 @@ export class CompleteTripUseCase {
       completedAt: updatedTrip.completedAt!,
       distance_m_final: updatedTrip.distance_m_final,
       duration_s_final: updatedTrip.duration_s_final,
+      totalPrice: finalPricing.totalPrice,
+      basePrice: finalPricing.basePrice,
+      surgeMultiplier: finalPricing.surgeMultiplier,
+      currency: finalPricing.currency,
+      breakdown: {
+        distancePrice: finalPricing.breakdown.distancePrice,
+        timePrice: finalPricing.breakdown.timePrice,
+        serviceFee: finalPricing.breakdown.serviceFee,
+        specialCharges: finalPricing.breakdown.specialCharges,
+      },
+      paymentIntentId: paymentIntent.paymentIntentId,
     };
   }
 
@@ -131,8 +142,9 @@ export class CompleteTripUseCase {
         distancePrice: breakdown.distancePrice ?? 0,
         timePrice: breakdown.timePrice ?? 0,
         serviceFee: breakdown.serviceFee ?? 0,
-        specialCharges: breakdown.specialCharges,
+        specialCharges: breakdown.specialCharges ?? finalPricing.specialCharges,
       },
+      taxes: finalPricing.taxes,
     };
   }
 

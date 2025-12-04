@@ -55,6 +55,8 @@ export interface FinalizeResponse {
     surgeMultiplier: number;
     currency: string;
     breakdown: PriceBreakdown;
+    taxes?: number;
+    specialCharges?: SpecialCharge[];
 }
 export declare class PricingClient {
     private readonly httpService;

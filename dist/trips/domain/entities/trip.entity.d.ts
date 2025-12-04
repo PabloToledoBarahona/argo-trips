@@ -18,6 +18,7 @@ export interface PricingSnapshot {
     totalPrice: number;
     currency: string;
     breakdown: PricingBreakdownSnapshot;
+    taxes?: number;
 }
 export declare class Trip {
     id: string;

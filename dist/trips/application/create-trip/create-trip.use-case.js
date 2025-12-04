@@ -131,13 +131,26 @@ let CreateTripUseCase = CreateTripUseCase_1 = class CreateTripUseCase {
                 quoteId: quoteResponse.quoteId,
             },
         });
-        this.logger.log(`Trip created: ${tripId}, quote: ${quoteResponse.quoteId}`);
+        this.logger.log(`Trip created: ${tripId}, quote: ${quoteResponse.quoteId}, est total: ${quoteResponse.estimateTotal} ${quoteResponse.currency}, surge=${quoteResponse.surgeMultiplier}`);
         return {
             id: savedTrip.id,
             status: savedTrip.status,
             riderId: savedTrip.riderId,
             vehicleType: savedTrip.vehicleType,
             requestedAt: savedTrip.requestedAt,
+            quoteId: quoteResponse.quoteId,
+            estimateTotal: quoteResponse.estimateTotal,
+            basePrice: quoteResponse.basePrice,
+            surgeMultiplier: quoteResponse.surgeMultiplier,
+            currency: quoteResponse.currency,
+            breakdown: {
+                distancePrice: quoteResponse.breakdown.distancePrice,
+                timePrice: quoteResponse.breakdown.timePrice,
+                serviceFee: quoteResponse.breakdown.serviceFee,
+                specialCharges: quoteResponse.breakdown.specialCharges,
+            },
+            distanceMeters: quoteResponse.distanceMeters,
+            durationSeconds: quoteResponse.durationSeconds,
         };
     }
     buildQuoteSnapshot(quote) {

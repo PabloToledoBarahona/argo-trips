@@ -77,6 +77,8 @@ export interface FinalizeResponse {
   surgeMultiplier: number;
   currency: string;
   breakdown: PriceBreakdown;
+  taxes?: number;
+  specialCharges?: SpecialCharge[];
 }
 
 // ============================================================================
