@@ -23,7 +23,72 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+**MS04 - TRIPS** is a NestJS microservice for managing ride-sharing trips in the Argo platform. It handles the complete trip lifecycle from request to payment, integrating with multiple services including Pricing (MS06), Payments (MS07), Geo (MS10), Profiles (MS02), and Driver Sessions (MS03).
+
+## Architecture Overview
+
+### Integration with MS06 - PRICING
+
+TRIPS consumes the Pricing microservice (MS06) for dynamic pricing calculations:
+
+#### During Trip Creation
+- **Endpoint**: `POST /pricing/quote`
+- **Purpose**: Get initial price estimate for trip request
+- **Request includes**:
+  - City, vehicle type, rider ID
+  - Origin/destination coordinates with H3 indices (res7/res9)
+  - Estimated distance and duration (when available)
+- **Response includes**:
+  - `quoteId`: Unique identifier for the quote
+  - `estimateTotal`: Total estimated price
+  - `basePrice`: Base fare
+  - `surgeMultiplier`: Dynamic pricing multiplier
+  - `currency`: Price currency (e.g., USD, EUR)
+  - `breakdown`: Price breakdown (distancePrice, timePrice, serviceFee, specialCharges)
+  - `distanceMeters`, `durationSeconds`: Route metrics
+- **Storage**: TRIPS persists a `pricingSnapshot` with all quote details for audit and consistency
+
+#### During Trip Completion
+- **Endpoint**: `POST /pricing/finalize`
+- **Purpose**: Calculate final price with actual trip metrics
+- **Request includes**:
+  - `quoteId`: Original quote identifier
+  - `tripId`: Trip identifier (for idempotency)
+  - Actual distance and duration traveled
+- **Response includes**:
+  - `totalPrice`: Final price after applying actual metrics
+  - `basePrice`, `surgeMultiplier`, `currency`: Final pricing components
+  - `breakdown`: Final price breakdown with specialCharges
+  - `taxes`: Optional tax amount
+- **Storage**: TRIPS updates `pricingSnapshot` with final pricing details
+- **Next step**: TRIPS creates a payment intent with MS07-PAYMENTS using `totalPrice` and `currency`
+
+### Key Features
+
+- **Pricing Contract Alignment**: All pricing fields match MS06 specifications:
+  - Use `estimateTotal` (not `estimatedTotal`) for quotes
+  - Use `totalPrice` (not `finalPrice`) for completed trips
+  - Use `surgeMultiplier` (not `dynamicMultiplier`) for dynamic pricing
+  - Support for `taxes` and `specialCharges` in final pricing
+
+- **Graceful Degradation**:
+  - Falls back to client-provided H3 indices if GeoClient unavailable
+  - Uses estimated metrics when actual metrics not available
+  - Continues operation with partial data when possible
+
+- **Idempotency**: Pricing finalization is idempotent via `tripId` parameter
+
+### Exposed API Endpoints
+
+TRIPS exposes the following endpoints with full pricing details:
+
+- `POST /api/trips/trips` - Create trip
+  - Returns: `quoteId`, `estimateTotal`, `basePrice`, `surgeMultiplier`, `currency`, `breakdown`, `distanceMeters`, `durationSeconds`
+
+- `PATCH /api/trips/trips/:id/complete` - Complete trip
+  - Returns: `totalPrice`, `basePrice`, `surgeMultiplier`, `currency`, `breakdown`, `taxes`, `paymentIntentId`
+
+All pricing fields are exposed to clients through the Gateway for transparency and consistency.
 
 ## Project setup
 

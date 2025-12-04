@@ -85,7 +85,7 @@ let CompleteTripUseCase = CompleteTripUseCase_1 = class CompleteTripUseCase {
                 newStatus: trip_status_enum_js_1.TripStatus.COMPLETED,
                 distance_m_final,
                 duration_s_final,
-                finalPrice: finalPricing.totalPrice,
+                totalPrice: finalPricing.totalPrice,
                 quoteId: trip.quoteId,
                 surgeMultiplier: finalPricing.surgeMultiplier,
                 paymentIntentId: paymentIntent.paymentIntentId,
