@@ -42,27 +42,36 @@ let CompleteTripUseCase = CompleteTripUseCase_1 = class CompleteTripUseCase {
         if (!trip.quoteId) {
             throw new common_1.BadRequestException(`Trip ${dto.tripId} is missing quoteId`);
         }
+        if (!trip.originH3Res7) {
+            throw new common_1.BadRequestException(`Trip ${dto.tripId} is missing originH3Res7 (required for pricing finalize)`);
+        }
         const distance_m_final = dto.distance_m_final ?? trip.distance_m_est ?? 0;
         const duration_s_final = dto.duration_s_final ?? trip.duration_s_est ?? 0;
         const pricingVehicleType = (0, vehicle_type_mapper_js_1.mapToPricingVehicleType)(trip.vehicleType);
+        const finalizeRequest = {
+            trip_id: trip.id,
+            quote_id: trip.quoteId,
+            vehicle_type: pricingVehicleType,
+            h3_res7: trip.originH3Res7,
+            distance_m_final,
+            duration_s_final,
+            city: trip.city,
+            status: 'completed',
+        };
         let finalPricing;
         try {
-            finalPricing = await this.pricingClient.finalize({
-                quoteId: trip.quoteId,
-                tripId: trip.id,
-                city: trip.city,
-                vehicleType: pricingVehicleType,
-                distance_m_final,
-                duration_s_final,
-            });
+            finalPricing = await this.pricingClient.finalize(finalizeRequest);
         }
         catch (error) {
             this.logger.error(`Pricing finalize failed for trip ${trip.id}: ${this.formatError(error)}`);
             throw new common_1.BadRequestException('Unable to finalize trip pricing');
         }
+        if (finalPricing.degradation) {
+            this.logger.warn(`Finalize for trip ${trip.id} returned with degradation: ${finalPricing.degradation}`);
+        }
         const paymentIntent = await this.paymentsClient.createIntent({
             tripId: trip.id,
-            amount: finalPricing.totalPrice,
+            amount: finalPricing.total_final,
             currency: finalPricing.currency,
             method: 'card',
         });
@@ -85,50 +94,46 @@ let CompleteTripUseCase = CompleteTripUseCase_1 = class CompleteTripUseCase {
                 newStatus: trip_status_enum_js_1.TripStatus.COMPLETED,
                 distance_m_final,
                 duration_s_final,
-                totalPrice: finalPricing.totalPrice,
+                totalPrice: finalPricing.total_final,
                 quoteId: trip.quoteId,
-                surgeMultiplier: finalPricing.surgeMultiplier,
+                surgeMultiplier: finalPricing.surge_used,
                 paymentIntentId: paymentIntent.paymentIntentId,
+                min_fare_applied: finalPricing.min_fare_applied,
+                cancel_fee_applied: finalPricing.cancel_fee_applied,
+                pricing_rule_version: finalPricing.pricing_rule_version,
+                degradation: finalPricing.degradation,
             },
         });
-        this.logger.log(`Trip ${dto.tripId} completed (quote ${trip.quoteId}), final price: ${finalPricing.totalPrice} ${finalPricing.currency}, surge=${finalPricing.surgeMultiplier}, payment intent: ${paymentIntent.paymentIntentId}`);
+        this.logger.log(`Trip ${dto.tripId} completed (quote ${trip.quoteId}), final price: ${finalPricing.total_final} ${finalPricing.currency}, surge=${finalPricing.surge_used}, min_fare_applied=${finalPricing.min_fare_applied}, payment intent: ${paymentIntent.paymentIntentId}, degradation=${finalPricing.degradation ?? 'none'}`);
         return {
             id: updatedTrip.id,
             status: updatedTrip.status,
             completedAt: updatedTrip.completedAt,
             distance_m_final: updatedTrip.distance_m_final,
             duration_s_final: updatedTrip.duration_s_final,
-            totalPrice: finalPricing.totalPrice,
-            basePrice: finalPricing.basePrice,
-            surgeMultiplier: finalPricing.surgeMultiplier,
+            totalPrice: finalPricing.total_final,
+            surgeMultiplier: finalPricing.surge_used,
             currency: finalPricing.currency,
-            breakdown: {
-                distancePrice: finalPricing.breakdown.distancePrice,
-                timePrice: finalPricing.breakdown.timePrice,
-                serviceFee: finalPricing.breakdown.serviceFee,
-                specialCharges: finalPricing.breakdown.specialCharges,
-            },
+            taxes: finalPricing.taxes,
+            min_fare_applied: finalPricing.min_fare_applied,
+            cancel_fee_applied: finalPricing.cancel_fee_applied,
+            pricing_rule_version: finalPricing.pricing_rule_version,
             paymentIntentId: paymentIntent.paymentIntentId,
+            degradation: finalPricing.degradation,
         };
     }
     buildFinalizeSnapshot(finalPricing) {
-        const breakdown = finalPricing.breakdown ?? {
-            distancePrice: 0,
-            timePrice: 0,
-            serviceFee: 0,
-        };
         return {
-            basePrice: finalPricing.basePrice,
-            surgeMultiplier: finalPricing.surgeMultiplier,
-            totalPrice: finalPricing.totalPrice,
+            basePrice: 0,
+            surgeMultiplier: finalPricing.surge_used,
+            totalPrice: finalPricing.total_final,
             currency: finalPricing.currency,
             breakdown: {
-                distancePrice: breakdown.distancePrice ?? 0,
-                timePrice: breakdown.timePrice ?? 0,
-                serviceFee: breakdown.serviceFee ?? 0,
-                specialCharges: breakdown.specialCharges ?? finalPricing.specialCharges,
+                distancePrice: 0,
+                timePrice: 0,
+                serviceFee: 0,
             },
-            taxes: finalPricing.taxes,
+            taxes: finalPricing.taxes.reduce((sum, tax) => sum + tax.amount, 0),
         };
     }
     formatError(error) {

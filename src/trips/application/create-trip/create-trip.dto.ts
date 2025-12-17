@@ -67,4 +67,5 @@ export class CreateTripResponseDto {
   breakdown: PricingBreakdownDto;
   distanceMeters?: number;
   durationSeconds?: number;
+  degradation?: string | null;
 }

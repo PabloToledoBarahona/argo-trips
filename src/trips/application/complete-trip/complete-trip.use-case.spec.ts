@@ -17,25 +17,22 @@ describe('CompleteTripUseCase', () => {
   let paymentsClient: jest.Mocked<PaymentsClient>;
 
   const mockFinalizeResponse: FinalizeResponse = {
-    quoteId: 'quote-123',
-    tripId: 'trip-123',
-    totalPrice: 18.5,
-    basePrice: 10.0,
-    surgeMultiplier: 1.5,
+    trip_id: 'trip-123',
     currency: 'USD',
-    breakdown: {
-      distancePrice: 9.0,
-      timePrice: 6.0,
-      serviceFee: 2.5,
-      specialCharges: [
-        {
-          type: 'toll_fee',
-          amount: 1.0,
-          description: 'Bridge toll',
-        },
-      ],
-    },
-    taxes: 1.5,
+    total_final: 18.5,
+    taxes: [
+      {
+        code: 'VAT',
+        amount: 1.5,
+        rate: 0.13,
+        description: 'IVA',
+      },
+    ],
+    surge_used: 1.5,
+    min_fare_applied: false,
+    cancel_fee_applied: false,
+    pricing_rule_version: 'NYC-2025-12-01',
+    degradation: null,
   };
 
   const mockTrip: Trip = {
@@ -48,6 +45,7 @@ describe('CompleteTripUseCase', () => {
     originLat: 40.7128,
     originLng: -74.006,
     originH3Res9: 'h3-origin-res9',
+    originH3Res7: '8728308a1ffffff',
     destLat: 40.7589,
     destLng: -73.9851,
     destH3Res9: 'h3-dest-res9',
@@ -164,27 +162,32 @@ describe('CompleteTripUseCase', () => {
       expect(result.completedAt).toBeDefined();
       expect(result.distance_m_final).toBe(dto.distance_m_final);
       expect(result.duration_s_final).toBe(dto.duration_s_final);
-      expect(result.totalPrice).toBe(mockFinalizeResponse.totalPrice);
-      expect(result.basePrice).toBe(mockFinalizeResponse.basePrice);
-      expect(result.surgeMultiplier).toBe(mockFinalizeResponse.surgeMultiplier);
+      expect(result.totalPrice).toBe(mockFinalizeResponse.total_final);
+      expect(result.surgeMultiplier).toBe(mockFinalizeResponse.surge_used);
       expect(result.currency).toBe(mockFinalizeResponse.currency);
-      expect(result.breakdown).toEqual(mockFinalizeResponse.breakdown);
+      expect(result.taxes).toEqual(mockFinalizeResponse.taxes);
+      expect(result.min_fare_applied).toBe(mockFinalizeResponse.min_fare_applied);
+      expect(result.cancel_fee_applied).toBe(mockFinalizeResponse.cancel_fee_applied);
+      expect(result.pricing_rule_version).toBe(mockFinalizeResponse.pricing_rule_version);
+      expect(result.degradation).toBe(mockFinalizeResponse.degradation);
       expect(result.paymentIntentId).toBe('pi-123');
 
-      // Verify PricingClient finalize was called with correct params
+      // Verify PricingClient finalize was called with MS06 format
       expect(pricingClient.finalize).toHaveBeenCalledWith({
-        quoteId: mockTrip.quoteId,
-        tripId: mockTrip.id,
-        city: mockTrip.city,
-        vehicleType: 'economy',
+        trip_id: mockTrip.id,
+        quote_id: mockTrip.quoteId,
+        vehicle_type: 'economy',
+        h3_res7: mockTrip.originH3Res7,
         distance_m_final: dto.distance_m_final,
         duration_s_final: dto.duration_s_final,
+        city: mockTrip.city,
+        status: 'completed',
       });
 
-      // Verify PaymentsClient was called with totalPrice and correct currency
+      // Verify PaymentsClient was called with total_final
       expect(paymentsClient.createIntent).toHaveBeenCalledWith({
         tripId: mockTrip.id,
-        amount: mockFinalizeResponse.totalPrice,
+        amount: mockFinalizeResponse.total_final,
         currency: mockFinalizeResponse.currency,
         method: 'card',
       });
@@ -194,9 +197,11 @@ describe('CompleteTripUseCase', () => {
         expect.objectContaining({
           tripId: mockTrip.id,
           payload: expect.objectContaining({
-            totalPrice: mockFinalizeResponse.totalPrice,
-            surgeMultiplier: mockFinalizeResponse.surgeMultiplier,
+            totalPrice: mockFinalizeResponse.total_final,
+            surgeMultiplier: mockFinalizeResponse.surge_used,
             paymentIntentId: 'pi-123',
+            min_fare_applied: mockFinalizeResponse.min_fare_applied,
+            degradation: mockFinalizeResponse.degradation,
           }),
         }),
       );
@@ -291,61 +296,6 @@ describe('CompleteTripUseCase', () => {
       pricingClient.finalize.mockRejectedValue(new Error('Pricing service unavailable'));
 
       await expect(useCase.execute(dto)).rejects.toThrow(BadRequestException);
-    });
-
-    it('should handle taxes and specialCharges correctly', async () => {
-      const dto: CompleteTripDto = {
-        tripId: 'trip-123',
-        distance_m_final: 5200,
-        duration_s_final: 620,
-      };
-
-      const responseWithExtras: FinalizeResponse = {
-        ...mockFinalizeResponse,
-        breakdown: {
-          ...mockFinalizeResponse.breakdown,
-          specialCharges: [
-            { type: 'airport_fee', amount: 5.0 },
-            { type: 'toll_fee', amount: 1.5 },
-          ],
-        },
-        taxes: 2.5,
-        specialCharges: [
-          { type: 'airport_fee', amount: 5.0 },
-          { type: 'toll_fee', amount: 1.5 },
-        ],
-      };
-
-      tripRepository.findById.mockResolvedValue(mockTrip);
-      pricingClient.finalize.mockResolvedValue(responseWithExtras);
-      paymentsClient.createIntent.mockResolvedValue({
-        paymentIntentId: 'pi-123',
-        status: 'requires_capture',
-        clientSecret: 'secret-123',
-      });
-
-      tripRepository.update.mockResolvedValue({
-        ...mockTrip,
-        status: TripStatus.COMPLETED,
-        completedAt: new Date(),
-        pricingSnapshot: {
-          basePrice: responseWithExtras.basePrice,
-          surgeMultiplier: responseWithExtras.surgeMultiplier,
-          totalPrice: responseWithExtras.totalPrice,
-          currency: responseWithExtras.currency,
-          breakdown: {
-            ...responseWithExtras.breakdown,
-            specialCharges: responseWithExtras.specialCharges,
-          },
-          taxes: responseWithExtras.taxes,
-        },
-      } as Trip);
-
-      auditRepository.create.mockResolvedValue(undefined);
-
-      const result = await useCase.execute(dto);
-
-      expect(result.breakdown.specialCharges).toEqual(responseWithExtras.specialCharges);
     });
   });
 });

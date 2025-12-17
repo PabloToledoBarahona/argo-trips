@@ -2,7 +2,7 @@ import { Injectable, Logger, BadRequestException, NotFoundException } from '@nes
 import { CompleteTripDto, CompleteTripResponseDto } from './complete-trip.dto.js';
 import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/trip-prisma.repository.js';
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
-import { PricingClient, FinalizeResponse } from '../../infrastructure/http-clients/pricing.client.js';
+import { PricingClient, FinalizeRequest, FinalizeResponse } from '../../infrastructure/http-clients/pricing.client.js';
 import { PaymentsClient } from '../../infrastructure/http-clients/payments.client.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
 import { PricingSnapshot } from '../../domain/entities/trip.entity.js';
@@ -40,6 +40,13 @@ export class CompleteTripUseCase {
       throw new BadRequestException(`Trip ${dto.tripId} is missing quoteId`);
     }
 
+    // Validate originH3Res7 exists (required by MS06-Pricing)
+    if (!trip.originH3Res7) {
+      throw new BadRequestException(
+        `Trip ${dto.tripId} is missing originH3Res7 (required for pricing finalize)`,
+      );
+    }
+
     // Use provided metrics or fallback to estimated
     const distance_m_final = dto.distance_m_final ?? trip.distance_m_est ?? 0;
     const duration_s_final = dto.duration_s_final ?? trip.duration_s_est ?? 0;
@@ -47,17 +54,22 @@ export class CompleteTripUseCase {
     // Finalize pricing with actual metrics
     const pricingVehicleType = mapToPricingVehicleType(trip.vehicleType);
 
+    // Build MS06-compliant finalize request
+    const finalizeRequest: FinalizeRequest = {
+      trip_id: trip.id,
+      quote_id: trip.quoteId,
+      vehicle_type: pricingVehicleType,
+      h3_res7: trip.originH3Res7,
+      distance_m_final,
+      duration_s_final,
+      city: trip.city,
+      status: 'completed',
+    };
+
     let finalPricing: FinalizeResponse;
 
     try {
-      finalPricing = await this.pricingClient.finalize({
-        quoteId: trip.quoteId,
-        tripId: trip.id,
-        city: trip.city,
-        vehicleType: pricingVehicleType,
-        distance_m_final,
-        duration_s_final,
-      });
+      finalPricing = await this.pricingClient.finalize(finalizeRequest);
     } catch (error) {
       this.logger.error(
         `Pricing finalize failed for trip ${trip.id}: ${this.formatError(error)}`,
@@ -65,10 +77,17 @@ export class CompleteTripUseCase {
       throw new BadRequestException('Unable to finalize trip pricing');
     }
 
+    // Log degradation warning if present
+    if (finalPricing.degradation) {
+      this.logger.warn(
+        `Finalize for trip ${trip.id} returned with degradation: ${finalPricing.degradation}`,
+      );
+    }
+
     // Create payment intent
     const paymentIntent = await this.paymentsClient.createIntent({
       tripId: trip.id,
-      amount: finalPricing.totalPrice,
+      amount: finalPricing.total_final,
       currency: finalPricing.currency,
       method: 'card', // Default to card, could be parameterized
     });
@@ -95,15 +114,19 @@ export class CompleteTripUseCase {
         newStatus: TripStatus.COMPLETED,
         distance_m_final,
         duration_s_final,
-        totalPrice: finalPricing.totalPrice,
+        totalPrice: finalPricing.total_final,
         quoteId: trip.quoteId,
-        surgeMultiplier: finalPricing.surgeMultiplier,
+        surgeMultiplier: finalPricing.surge_used,
         paymentIntentId: paymentIntent.paymentIntentId,
+        min_fare_applied: finalPricing.min_fare_applied,
+        cancel_fee_applied: finalPricing.cancel_fee_applied,
+        pricing_rule_version: finalPricing.pricing_rule_version,
+        degradation: finalPricing.degradation,
       },
     });
 
     this.logger.log(
-      `Trip ${dto.tripId} completed (quote ${trip.quoteId}), final price: ${finalPricing.totalPrice} ${finalPricing.currency}, surge=${finalPricing.surgeMultiplier}, payment intent: ${paymentIntent.paymentIntentId}`,
+      `Trip ${dto.tripId} completed (quote ${trip.quoteId}), final price: ${finalPricing.total_final} ${finalPricing.currency}, surge=${finalPricing.surge_used}, min_fare_applied=${finalPricing.min_fare_applied}, payment intent: ${paymentIntent.paymentIntentId}, degradation=${finalPricing.degradation ?? 'none'}`,
     );
 
     return {
@@ -112,39 +135,36 @@ export class CompleteTripUseCase {
       completedAt: updatedTrip.completedAt!,
       distance_m_final: updatedTrip.distance_m_final,
       duration_s_final: updatedTrip.duration_s_final,
-      totalPrice: finalPricing.totalPrice,
-      basePrice: finalPricing.basePrice,
-      surgeMultiplier: finalPricing.surgeMultiplier,
+      totalPrice: finalPricing.total_final,
+      surgeMultiplier: finalPricing.surge_used,
       currency: finalPricing.currency,
-      breakdown: {
-        distancePrice: finalPricing.breakdown.distancePrice,
-        timePrice: finalPricing.breakdown.timePrice,
-        serviceFee: finalPricing.breakdown.serviceFee,
-        specialCharges: finalPricing.breakdown.specialCharges,
-      },
+      taxes: finalPricing.taxes,
+      min_fare_applied: finalPricing.min_fare_applied,
+      cancel_fee_applied: finalPricing.cancel_fee_applied,
+      pricing_rule_version: finalPricing.pricing_rule_version,
       paymentIntentId: paymentIntent.paymentIntentId,
+      degradation: finalPricing.degradation,
     };
   }
 
+  /**
+   * Build pricing snapshot from MS06 finalize response
+   * Stores full pricing details for audit trail
+   */
   private buildFinalizeSnapshot(finalPricing: FinalizeResponse): PricingSnapshot {
-    const breakdown = finalPricing.breakdown ?? {
-      distancePrice: 0,
-      timePrice: 0,
-      serviceFee: 0,
-    };
-
+    // MS06 finalize doesn't return breakdown, so we use minimal snapshot
+    // The full details are in the audit log payload
     return {
-      basePrice: finalPricing.basePrice,
-      surgeMultiplier: finalPricing.surgeMultiplier,
-      totalPrice: finalPricing.totalPrice,
+      basePrice: 0, // Not returned by MS06 finalize
+      surgeMultiplier: finalPricing.surge_used,
+      totalPrice: finalPricing.total_final,
       currency: finalPricing.currency,
       breakdown: {
-        distancePrice: breakdown.distancePrice ?? 0,
-        timePrice: breakdown.timePrice ?? 0,
-        serviceFee: breakdown.serviceFee ?? 0,
-        specialCharges: breakdown.specialCharges ?? finalPricing.specialCharges,
+        distancePrice: 0,
+        timePrice: 0,
+        serviceFee: 0,
       },
-      taxes: finalPricing.taxes,
+      taxes: finalPricing.taxes.reduce((sum, tax) => sum + tax.amount, 0),
     };
   }
 

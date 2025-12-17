@@ -93,6 +93,7 @@ class CreateTripResponseDto {
     breakdown;
     distanceMeters;
     durationSeconds;
+    degradation;
 }
 exports.CreateTripResponseDto = CreateTripResponseDto;
 //# sourceMappingURL=create-trip.dto.js.map

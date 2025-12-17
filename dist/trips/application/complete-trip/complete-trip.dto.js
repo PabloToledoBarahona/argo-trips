@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CompleteTripResponseDto = exports.PricingBreakdownDto = exports.CompleteTripDto = void 0;
+exports.CompleteTripResponseDto = exports.CompleteTripDto = void 0;
 const class_validator_1 = require("class-validator");
 class CompleteTripDto {
     tripId;
@@ -34,13 +34,6 @@ __decorate([
     (0, class_validator_1.Min)(0),
     __metadata("design:type", Number)
 ], CompleteTripDto.prototype, "duration_s_final", void 0);
-class PricingBreakdownDto {
-    distancePrice;
-    timePrice;
-    serviceFee;
-    specialCharges;
-}
-exports.PricingBreakdownDto = PricingBreakdownDto;
 class CompleteTripResponseDto {
     id;
     status;
@@ -48,11 +41,14 @@ class CompleteTripResponseDto {
     distance_m_final;
     duration_s_final;
     totalPrice;
-    basePrice;
     surgeMultiplier;
     currency;
-    breakdown;
+    taxes;
+    min_fare_applied;
+    cancel_fee_applied;
+    pricing_rule_version;
     paymentIntentId;
+    degradation;
 }
 exports.CompleteTripResponseDto = CompleteTripResponseDto;
 //# sourceMappingURL=complete-trip.dto.js.map

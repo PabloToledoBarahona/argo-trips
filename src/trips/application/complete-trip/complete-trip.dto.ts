@@ -1,4 +1,5 @@
 import { IsString, IsNotEmpty, IsNumber, IsOptional, Min } from 'class-validator';
+import { Tax } from '../../infrastructure/http-clients/pricing.client.js';
 
 export class CompleteTripDto {
   @IsString()
@@ -16,17 +17,6 @@ export class CompleteTripDto {
   duration_s_final?: number;
 }
 
-export class PricingBreakdownDto {
-  distancePrice: number;
-  timePrice: number;
-  serviceFee: number;
-  specialCharges?: {
-    type: string;
-    amount: number;
-    description?: string;
-  }[];
-}
-
 export class CompleteTripResponseDto {
   id: string;
   status: string;
@@ -34,9 +24,12 @@ export class CompleteTripResponseDto {
   distance_m_final?: number;
   duration_s_final?: number;
   totalPrice: number;
-  basePrice: number;
   surgeMultiplier: number;
   currency: string;
-  breakdown: PricingBreakdownDto;
+  taxes: Tax[];
+  min_fare_applied: boolean;
+  cancel_fee_applied: boolean;
+  pricing_rule_version: string;
   paymentIntentId: string;
+  degradation?: string | null;
 }

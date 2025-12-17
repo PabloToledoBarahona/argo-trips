@@ -36,11 +36,13 @@ export class Trip {
   originLat: number;
   originLng: number;
   originH3Res9: string;
+  originH3Res7?: string;
 
   // Destination
   destLat: number;
   destLng: number;
   destH3Res9: string;
+  destH3Res7?: string;
 
   // Timestamps
   requestedAt: Date;

@@ -11,9 +11,11 @@ class Trip {
     originLat;
     originLng;
     originH3Res9;
+    originH3Res7;
     destLat;
     destLng;
     destH3Res9;
+    destH3Res7;
     requestedAt;
     offeredAt;
     assignedAt;

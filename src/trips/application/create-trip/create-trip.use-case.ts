@@ -103,24 +103,21 @@ export class CreateTripUseCase {
 
     const pricingVehicleType = mapToPricingVehicleType(dto.vehicleType);
 
+    // Build MS06-compliant quote request
     const quoteRequest: QuoteRequest = {
-      city: dto.city,
-      vehicleType: pricingVehicleType,
-      riderId: dto.riderId,
       origin: {
         lat: dto.originLat,
         lng: dto.originLng,
-        h3_res7: originH3Res7,
-        h3_res9: resolvedOriginH3Res9,
       },
       destination: {
         lat: dto.destLat,
         lng: dto.destLng,
-        h3_res7: destH3Res7,
-        h3_res9: resolvedDestH3Res9,
       },
-      distance_m: distanceMeters,
-      duration_s: durationSeconds,
+      vehicle_type: pricingVehicleType,
+      city: dto.city,
+      include_breakdown: true,
+      distance_m_est: distanceMeters,
+      duration_s_est: durationSeconds,
     };
 
     let quoteResponse: QuoteResponse;
@@ -134,10 +131,13 @@ export class CreateTripUseCase {
       throw new BadRequestException('Unable to retrieve pricing quote');
     }
 
-    distanceMeters = distanceMeters ?? quoteResponse.distanceMeters;
-    durationSeconds = durationSeconds ?? quoteResponse.durationSeconds;
+    // Log degradation warning if present
+    if (quoteResponse.degradation) {
+      this.logger.warn(
+        `Quote ${quoteResponse.quote_id} for trip ${tripId} returned with degradation: ${quoteResponse.degradation}. Price estimate may be less accurate.`,
+      );
+    }
 
-    // Calculate distance and duration using GeoClient
     // Create Trip entity
     const trip = new Trip({
       id: tripId,
@@ -148,11 +148,13 @@ export class CreateTripUseCase {
       originLat: dto.originLat,
       originLng: dto.originLng,
       originH3Res9: resolvedOriginH3Res9,
+      originH3Res7,
       destLat: dto.destLat,
       destLng: dto.destLng,
       destH3Res9: resolvedDestH3Res9,
+      destH3Res7,
       requestedAt: new Date(),
-      quoteId: quoteResponse.quoteId,
+      quoteId: quoteResponse.quote_id,
       distance_m_est: distanceMeters,
       duration_s_est: durationSeconds,
       pricingSnapshot: this.buildQuoteSnapshot(quoteResponse),
@@ -169,12 +171,13 @@ export class CreateTripUseCase {
       actorId: dto.riderId,
       payload: {
         status: TripStatus.REQUESTED,
-        quoteId: quoteResponse.quoteId,
+        quoteId: quoteResponse.quote_id,
+        degradation: quoteResponse.degradation,
       },
     });
 
     this.logger.log(
-      `Trip created: ${tripId}, quote: ${quoteResponse.quoteId}, est total: ${quoteResponse.estimateTotal} ${quoteResponse.currency}, surge=${quoteResponse.surgeMultiplier}`,
+      `Trip created: ${tripId}, quote: ${quoteResponse.quote_id}, est total: ${quoteResponse.estimate_total} ${quoteResponse.currency}, surge=${quoteResponse.zone.surge}, degradation=${quoteResponse.degradation ?? 'none'}`,
     );
 
     return {
@@ -183,40 +186,83 @@ export class CreateTripUseCase {
       riderId: savedTrip.riderId,
       vehicleType: savedTrip.vehicleType,
       requestedAt: savedTrip.requestedAt,
-      quoteId: quoteResponse.quoteId,
-      estimateTotal: quoteResponse.estimateTotal,
-      basePrice: quoteResponse.basePrice,
-      surgeMultiplier: quoteResponse.surgeMultiplier,
+      quoteId: quoteResponse.quote_id,
+      estimateTotal: quoteResponse.estimate_total,
+      basePrice: quoteResponse.breakdown?.base ?? 0,
+      surgeMultiplier: quoteResponse.zone.surge,
       currency: quoteResponse.currency,
-      breakdown: {
-        distancePrice: quoteResponse.breakdown.distancePrice,
-        timePrice: quoteResponse.breakdown.timePrice,
-        serviceFee: quoteResponse.breakdown.serviceFee,
-        specialCharges: quoteResponse.breakdown.specialCharges,
-      },
-      distanceMeters: quoteResponse.distanceMeters,
-      durationSeconds: quoteResponse.durationSeconds,
+      breakdown: this.buildBreakdownDto(quoteResponse),
+      distanceMeters,
+      durationSeconds,
+      degradation: quoteResponse.degradation,
     };
   }
 
+  /**
+   * Build pricing snapshot from MS06 quote response
+   * Stores full pricing details for audit trail
+   */
   private buildQuoteSnapshot(quote: QuoteResponse): PricingSnapshot {
-    const breakdown = quote.breakdown ?? {
-      distancePrice: 0,
-      timePrice: 0,
-      serviceFee: 0,
-    };
+    const breakdown = quote.breakdown;
+
+    if (!breakdown) {
+      // Degraded mode: minimal snapshot
+      return {
+        basePrice: 0,
+        surgeMultiplier: quote.zone.surge,
+        totalPrice: quote.estimate_total,
+        currency: quote.currency,
+        breakdown: {
+          distancePrice: 0,
+          timePrice: 0,
+          serviceFee: 0,
+        },
+      };
+    }
 
     return {
-      basePrice: quote.basePrice,
-      surgeMultiplier: quote.surgeMultiplier,
-      totalPrice: quote.estimateTotal,
+      basePrice: breakdown.base,
+      surgeMultiplier: quote.zone.surge,
+      totalPrice: quote.estimate_total,
       currency: quote.currency,
       breakdown: {
-        distancePrice: breakdown.distancePrice ?? 0,
-        timePrice: breakdown.timePrice ?? 0,
-        serviceFee: breakdown.serviceFee ?? 0,
-        specialCharges: breakdown.specialCharges,
+        distancePrice: breakdown.per_km.amount,
+        timePrice: breakdown.per_min.amount,
+        serviceFee: breakdown.min_fare,
+        specialCharges: breakdown.extras.map((extra) => ({
+          type: extra.code,
+          amount: extra.amount,
+          description: extra.description,
+        })),
       },
+    };
+  }
+
+  /**
+   * Build breakdown DTO for response
+   * Maps MS06 format to TRIPS API format
+   */
+  private buildBreakdownDto(quote: QuoteResponse) {
+    const breakdown = quote.breakdown;
+
+    if (!breakdown) {
+      return {
+        distancePrice: 0,
+        timePrice: 0,
+        serviceFee: 0,
+        specialCharges: [],
+      };
+    }
+
+    return {
+      distancePrice: breakdown.per_km.amount,
+      timePrice: breakdown.per_min.amount,
+      serviceFee: breakdown.min_fare,
+      specialCharges: breakdown.extras.map((extra) => ({
+        type: extra.code,
+        amount: extra.amount,
+        description: extra.description,
+      })),
     };
   }
 

@@ -22,27 +22,42 @@ describe('CreateTripUseCase', () => {
   let pricingClient: jest.Mocked<PricingClient>;
 
   const mockQuoteResponse: QuoteResponse = {
-    quoteId: 'quote-123',
-    city: 'New York',
-    vehicleType: 'economy',
+    quote_id: 'quote-123',
     currency: 'USD',
-    basePrice: 10.0,
-    surgeMultiplier: 1.5,
-    estimateTotal: 15.0,
+    estimate_total: 15.0,
+    expires_at: '2025-12-01T14:42:30Z',
+    degradation: null,
     breakdown: {
-      distancePrice: 8.0,
-      timePrice: 5.0,
-      serviceFee: 2.0,
-      specialCharges: [
+      base: 10.0,
+      per_km: {
+        rate: 2.5,
+        distance_km: 5.0,
+        amount: 12.5,
+      },
+      per_min: {
+        rate: 0.4,
+        duration_min: 10.0,
+        amount: 4.0,
+      },
+      multipliers: {
+        vehicle: 1.0,
+        surge: 1.5,
+        time: 1.0,
+      },
+      extras: [
         {
-          type: 'airport_fee',
+          code: 'AIRPORT_FEE',
           amount: 3.0,
           description: 'Airport surcharge',
         },
       ],
+      min_fare: 10.0,
+      rounded_step: 0.5,
     },
-    distanceMeters: 5000,
-    durationSeconds: 600,
+    zone: {
+      h3_res7: '8728308a1ffffff',
+      surge: 1.5,
+    },
   };
 
   beforeEach(async () => {
@@ -145,15 +160,24 @@ describe('CreateTripUseCase', () => {
         destLng: dto.destLng,
         destH3Res9: dto.destH3Res9,
         requestedAt: new Date(),
-        quoteId: mockQuoteResponse.quoteId,
+        quoteId: mockQuoteResponse.quote_id,
         distance_m_est: 5000,
         duration_s_est: 600,
         pricingSnapshot: {
-          basePrice: mockQuoteResponse.basePrice,
-          surgeMultiplier: mockQuoteResponse.surgeMultiplier,
-          totalPrice: mockQuoteResponse.estimateTotal,
+          basePrice: mockQuoteResponse.breakdown.base,
+          surgeMultiplier: mockQuoteResponse.zone.surge,
+          totalPrice: mockQuoteResponse.estimate_total,
           currency: mockQuoteResponse.currency,
-          breakdown: mockQuoteResponse.breakdown,
+          breakdown: {
+            distancePrice: mockQuoteResponse.breakdown.per_km.amount,
+            timePrice: mockQuoteResponse.breakdown.per_min.amount,
+            serviceFee: mockQuoteResponse.breakdown.min_fare,
+            specialCharges: mockQuoteResponse.breakdown.extras.map((e) => ({
+              type: e.code,
+              amount: e.amount,
+              description: e.description,
+            })),
+          },
         },
       } as Trip);
 
@@ -169,21 +193,26 @@ describe('CreateTripUseCase', () => {
       expect(result.status).toBe(TripStatus.REQUESTED);
       expect(result.riderId).toBe(dto.riderId);
       expect(result.vehicleType).toBe('economy');
-      expect(result.quoteId).toBe(mockQuoteResponse.quoteId);
-      expect(result.estimateTotal).toBe(mockQuoteResponse.estimateTotal);
-      expect(result.basePrice).toBe(mockQuoteResponse.basePrice);
-      expect(result.surgeMultiplier).toBe(mockQuoteResponse.surgeMultiplier);
+      expect(result.quoteId).toBe(mockQuoteResponse.quote_id);
+      expect(result.estimateTotal).toBe(mockQuoteResponse.estimate_total);
+      expect(result.basePrice).toBe(mockQuoteResponse.breakdown.base);
+      expect(result.surgeMultiplier).toBe(mockQuoteResponse.zone.surge);
       expect(result.currency).toBe(mockQuoteResponse.currency);
-      expect(result.breakdown).toEqual(mockQuoteResponse.breakdown);
-      expect(result.distanceMeters).toBe(mockQuoteResponse.distanceMeters);
-      expect(result.durationSeconds).toBe(mockQuoteResponse.durationSeconds);
+      expect(result.degradation).toBe(mockQuoteResponse.degradation);
 
-      // Verify PricingClient was called with riderId
+      // Verify PricingClient was called with correct format
       expect(pricingClient.quote).toHaveBeenCalledWith(
         expect.objectContaining({
-          riderId: dto.riderId,
+          origin: expect.objectContaining({
+            lat: dto.originLat,
+            lng: dto.originLng,
+          }),
+          destination: expect.objectContaining({
+            lat: dto.destLat,
+            lng: dto.destLng,
+          }),
+          vehicle_type: 'economy',
           city: dto.city,
-          vehicleType: 'economy',
         }),
       );
 
@@ -230,15 +259,24 @@ describe('CreateTripUseCase', () => {
         destLng: dto.destLng,
         destH3Res9: dto.destH3Res9,
         requestedAt: new Date(),
-        quoteId: mockQuoteResponse.quoteId,
+        quoteId: mockQuoteResponse.quote_id,
         distance_m_est: 4500,
         duration_s_est: 550,
         pricingSnapshot: {
-          basePrice: mockQuoteResponse.basePrice,
-          surgeMultiplier: mockQuoteResponse.surgeMultiplier,
-          totalPrice: mockQuoteResponse.estimateTotal,
+          basePrice: mockQuoteResponse.breakdown.base,
+          surgeMultiplier: mockQuoteResponse.zone.surge,
+          totalPrice: mockQuoteResponse.estimate_total,
           currency: mockQuoteResponse.currency,
-          breakdown: mockQuoteResponse.breakdown,
+          breakdown: {
+            distancePrice: mockQuoteResponse.breakdown.per_km.amount,
+            timePrice: mockQuoteResponse.breakdown.per_min.amount,
+            serviceFee: mockQuoteResponse.breakdown.min_fare,
+            specialCharges: mockQuoteResponse.breakdown.extras.map((e) => ({
+              type: e.code,
+              amount: e.amount,
+              description: e.description,
+            })),
+          },
         },
       } as Trip);
 
@@ -249,17 +287,13 @@ describe('CreateTripUseCase', () => {
 
       // Assertions
       expect(result).toBeDefined();
-      expect(result.quoteId).toBe(mockQuoteResponse.quoteId);
+      expect(result.quoteId).toBe(mockQuoteResponse.quote_id);
 
-      // Verify PricingClient was called with fallback H3
+      // Verify PricingClient was called correctly
       expect(pricingClient.quote).toHaveBeenCalledWith(
         expect.objectContaining({
-          origin: expect.objectContaining({
-            h3_res9: dto.originH3Res9,
-          }),
-          destination: expect.objectContaining({
-            h3_res9: dto.destH3Res9,
-          }),
+          vehicle_type: 'economy',
+          city: dto.city,
         }),
       );
     });
