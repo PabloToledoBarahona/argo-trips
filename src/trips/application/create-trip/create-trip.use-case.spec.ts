@@ -57,8 +57,13 @@ describe('CreateTripUseCase', () => {
     };
 
     const mockGeoClient = {
-      h3: jest.fn(),
-      distance: jest.fn(),
+      h3Encode: jest.fn(),
+      h3EncodeSingle: jest.fn(),
+      route: jest.fn(),
+      eta: jest.fn(),
+      geocodeForward: jest.fn(),
+      geocodeReverse: jest.fn(),
+      onModuleInit: jest.fn(), // Add lifecycle hook
     };
 
     const mockPricingClient = {
@@ -101,18 +106,26 @@ describe('CreateTripUseCase', () => {
         destH3Res9: 'h3-dest-res9',
       };
 
-      // Mock GeoClient responses
-      geoClient.h3.mockResolvedValueOnce({
-        h3_res7: 'h3-origin-res7',
-        h3_res9: 'h3-origin-res9',
+      // Mock GeoClient responses (batch H3 encode)
+      geoClient.h3Encode.mockResolvedValueOnce({
+        results: [
+          { op: 'encode', h3: 'h3-origin-res9' },
+          { op: 'encode', h3: 'h3-origin-res7' },
+          { op: 'encode', h3: 'h3-dest-res9' },
+          { op: 'encode', h3: 'h3-dest-res7' },
+        ],
       });
-      geoClient.h3.mockResolvedValueOnce({
-        h3_res7: 'h3-dest-res7',
-        h3_res9: 'h3-dest-res9',
-      });
-      geoClient.distance.mockResolvedValue({
-        distanceMeters: 5000,
-        durationSeconds: 600,
+      geoClient.route.mockResolvedValue({
+        engine: 'mapbox',
+        duration_sec: 600,
+        distance_m: 5000,
+        polyline: null,
+        waypoints: [
+          { lat: 40.7128, lng: -74.006 },
+          { lat: 40.7589, lng: -73.9851 },
+        ],
+        h3_path_res9: [],
+        from_cache: false,
       });
 
       // Mock PricingClient quote
@@ -193,8 +206,8 @@ describe('CreateTripUseCase', () => {
       };
 
       // Mock GeoClient to fail
-      geoClient.h3.mockRejectedValue(new Error('GeoClient unavailable'));
-      geoClient.distance.mockRejectedValue(new Error('GeoClient unavailable'));
+      geoClient.h3Encode.mockRejectedValue(new Error('GeoClient unavailable'));
+      geoClient.route.mockRejectedValue(new Error('GeoClient unavailable'));
 
       // Mock PricingClient quote with fallback
       pricingClient.quote.mockResolvedValue({
@@ -265,8 +278,8 @@ describe('CreateTripUseCase', () => {
       };
 
       // Mock GeoClient to fail and not return H3
-      geoClient.h3.mockRejectedValue(new Error('GeoClient unavailable'));
-      geoClient.distance.mockRejectedValue(new Error('GeoClient unavailable'));
+      geoClient.h3Encode.mockRejectedValue(new Error('GeoClient unavailable'));
+      geoClient.route.mockRejectedValue(new Error('GeoClient unavailable'));
 
       // Simulate missing H3 from DTO by modifying internal logic expectation
       // This test validates the error handling when both sources fail
@@ -290,17 +303,25 @@ describe('CreateTripUseCase', () => {
       };
 
       // Mock GeoClient success
-      geoClient.h3.mockResolvedValueOnce({
-        h3_res7: 'h3-origin-res7',
-        h3_res9: 'h3-origin-res9',
+      geoClient.h3Encode.mockResolvedValueOnce({
+        results: [
+          { op: 'encode', h3: 'h3-origin-res9' },
+          { op: 'encode', h3: 'h3-origin-res7' },
+          { op: 'encode', h3: 'h3-dest-res9' },
+          { op: 'encode', h3: 'h3-dest-res7' },
+        ],
       });
-      geoClient.h3.mockResolvedValueOnce({
-        h3_res7: 'h3-dest-res7',
-        h3_res9: 'h3-dest-res9',
-      });
-      geoClient.distance.mockResolvedValue({
-        distanceMeters: 5000,
-        durationSeconds: 600,
+      geoClient.route.mockResolvedValue({
+        engine: 'mapbox',
+        duration_sec: 600,
+        distance_m: 5000,
+        polyline: null,
+        waypoints: [
+          { lat: 40.7128, lng: -74.006 },
+          { lat: 40.7589, lng: -73.9851 },
+        ],
+        h3_path_res9: [],
+        from_cache: false,
       });
 
       // Mock PricingClient to fail

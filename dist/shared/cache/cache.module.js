@@ -6,20 +6,16 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AuthModule = void 0;
+exports.CacheModule = void 0;
 const common_1 = require("@nestjs/common");
-const jwt_payload_middleware_js_1 = require("./middleware/jwt-payload.middleware.js");
-const service_token_service_js_1 = require("./services/service-token.service.js");
-let AuthModule = class AuthModule {
-    configure(consumer) {
-        consumer.apply(jwt_payload_middleware_js_1.JwtPayloadMiddleware).forRoutes('*');
-    }
+const h3_cache_service_js_1 = require("./h3-cache.service.js");
+let CacheModule = class CacheModule {
 };
-exports.AuthModule = AuthModule;
-exports.AuthModule = AuthModule = __decorate([
+exports.CacheModule = CacheModule;
+exports.CacheModule = CacheModule = __decorate([
     (0, common_1.Module)({
-        providers: [service_token_service_js_1.ServiceTokenService],
-        exports: [service_token_service_js_1.ServiceTokenService],
+        providers: [h3_cache_service_js_1.H3CacheService],
+        exports: [h3_cache_service_js_1.H3CacheService],
     })
-], AuthModule);
-//# sourceMappingURL=auth.module.js.map
+], CacheModule);
+//# sourceMappingURL=cache.module.js.map

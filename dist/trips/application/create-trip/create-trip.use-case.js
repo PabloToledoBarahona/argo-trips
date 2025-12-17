@@ -20,6 +20,7 @@ const pricing_client_js_1 = require("../../infrastructure/http-clients/pricing.c
 const trip_entity_js_1 = require("../../domain/entities/trip.entity.js");
 const trip_status_enum_js_1 = require("../../domain/enums/trip-status.enum.js");
 const vehicle_type_mapper_js_1 = require("../shared/vehicle-type.mapper.js");
+const geo_profile_mapper_js_1 = require("../shared/geo-profile.mapper.js");
 let CreateTripUseCase = CreateTripUseCase_1 = class CreateTripUseCase {
     tripRepository;
     auditRepository;
@@ -43,29 +44,48 @@ let CreateTripUseCase = CreateTripUseCase_1 = class CreateTripUseCase {
         let destH3Res9;
         let distanceMeters;
         let durationSeconds;
+        const geoProfile = (0, geo_profile_mapper_js_1.mapToGeoProfile)(dto.vehicleType);
         try {
-            const originH3 = await this.geoClient.h3(originCoordinates.lat, originCoordinates.lng);
-            originH3Res7 = originH3.h3_res7;
-            originH3Res9 = originH3.h3_res9;
+            const h3Response = await this.geoClient.h3Encode({
+                ops: [
+                    { op: 'encode', lat: dto.originLat, lng: dto.originLng, res: 9 },
+                    { op: 'encode', lat: dto.originLat, lng: dto.originLng, res: 7 },
+                    { op: 'encode', lat: dto.destLat, lng: dto.destLng, res: 9 },
+                    { op: 'encode', lat: dto.destLat, lng: dto.destLng, res: 7 },
+                ],
+            });
+            const [originRes9Result, originRes7Result, destRes9Result, destRes7Result] = h3Response.results;
+            if (originRes9Result.op === 'encode' && !('error' in originRes9Result)) {
+                originH3Res9 = originRes9Result.h3;
+            }
+            if (originRes7Result.op === 'encode' && !('error' in originRes7Result)) {
+                originH3Res7 = originRes7Result.h3;
+            }
+            if (destRes9Result.op === 'encode' && !('error' in destRes9Result)) {
+                destH3Res9 = destRes9Result.h3;
+            }
+            if (destRes7Result.op === 'encode' && !('error' in destRes7Result)) {
+                destH3Res7 = destRes7Result.h3;
+            }
         }
         catch (error) {
-            this.logger.error(`Failed to resolve origin H3 for trip ${tripId}: ${this.formatError(error)}`);
+            this.logger.error(`Failed to resolve H3 indexes for trip ${tripId}: ${this.formatError(error)}`);
         }
         try {
-            const destinationH3 = await this.geoClient.h3(destinationCoordinates.lat, destinationCoordinates.lng);
-            destH3Res7 = destinationH3.h3_res7;
-            destH3Res9 = destinationH3.h3_res9;
+            const routeResponse = await this.geoClient.route({
+                origin: originCoordinates,
+                destination: destinationCoordinates,
+                profile: geoProfile,
+                city: dto.city,
+                include_polyline: false,
+                alternatives: 0,
+            });
+            distanceMeters = routeResponse.distance_m;
+            durationSeconds = routeResponse.duration_sec;
+            this.logger.debug(`Route calculated for trip ${tripId}: ${distanceMeters}m, ${durationSeconds}s, engine=${routeResponse.engine}`);
         }
         catch (error) {
-            this.logger.error(`Failed to resolve destination H3 for trip ${tripId}: ${this.formatError(error)}`);
-        }
-        try {
-            const distanceResponse = await this.geoClient.distance(originCoordinates, destinationCoordinates);
-            distanceMeters = distanceResponse.distanceMeters;
-            durationSeconds = distanceResponse.durationSeconds;
-        }
-        catch (error) {
-            this.logger.error(`Geo distance failed for trip ${tripId}: ${this.formatError(error)}`);
+            this.logger.error(`GEO route failed for trip ${tripId}: ${this.formatError(error)}. Will use Pricing service fallback.`);
         }
         const resolvedOriginH3Res9 = originH3Res9 ?? dto.originH3Res9;
         const resolvedDestH3Res9 = destH3Res9 ?? dto.destH3Res9;

@@ -19,6 +19,7 @@ const geo_client_js_1 = require("../../infrastructure/http-clients/geo.client.js
 const pin_cache_service_js_1 = require("../../infrastructure/redis/pin-cache.service.js");
 const timer_service_js_1 = require("../../infrastructure/redis/timer.service.js");
 const trip_status_enum_js_1 = require("../../domain/enums/trip-status.enum.js");
+const geo_profile_mapper_js_1 = require("../shared/geo-profile.mapper.js");
 let AcceptTripUseCase = AcceptTripUseCase_1 = class AcceptTripUseCase {
     tripRepository;
     auditRepository;
@@ -53,10 +54,25 @@ let AcceptTripUseCase = AcceptTripUseCase_1 = class AcceptTripUseCase {
         if (driverSession.vehicleType !== trip.vehicleType) {
             throw new common_1.BadRequestException(`Driver vehicle type ${driverSession.vehicleType} does not match trip requirement ${trip.vehicleType}`);
         }
+        const geoProfile = (0, geo_profile_mapper_js_1.mapToGeoProfile)(trip.vehicleType);
         const etaResponse = await this.geoClient.eta({
-            lat: driverSession.lastLocation.lat,
-            lng: driverSession.lastLocation.lng,
-        }, { lat: trip.originLat, lng: trip.originLng });
+            origins: [
+                {
+                    lat: driverSession.lastLocation.lat,
+                    lng: driverSession.lastLocation.lng,
+                },
+            ],
+            destinations: [{ lat: trip.originLat, lng: trip.originLng }],
+            profile: geoProfile,
+            city: trip.city,
+        });
+        const etaPair = etaResponse.pairs[0];
+        if (!etaPair) {
+            throw new common_1.BadRequestException('Failed to calculate ETA: no results from GEO service');
+        }
+        const etaSeconds = etaPair.duration_sec;
+        const etaDistance = etaPair.distance_m;
+        this.logger.debug(`ETA calculated for driver ${dto.driverId} to pickup: ${etaSeconds}s, ${etaDistance}m, engine=${etaResponse.engine}`);
         const pin = this.generatePin();
         await this.pinCacheService.setPin(trip.id, pin, this.PIN_TTL_SECONDS);
         await this.timerService.setRiderNoShow(trip.id, this.RIDER_NO_SHOW_SECONDS);
@@ -75,10 +91,13 @@ let AcceptTripUseCase = AcceptTripUseCase_1 = class AcceptTripUseCase {
             payload: {
                 previousStatus: trip.status,
                 newStatus: trip_status_enum_js_1.TripStatus.ASSIGNED,
-                etaSeconds: etaResponse.etaSeconds,
+                etaSeconds,
+                etaDistanceMeters: etaDistance,
+                geoEngine: etaResponse.engine,
+                geoDegradation: etaResponse.degradation,
             },
         });
-        this.logger.log(`Trip ${trip.id} accepted by driver ${dto.driverId}, ETA: ${etaResponse.etaSeconds}s`);
+        this.logger.log(`Trip ${trip.id} accepted by driver ${dto.driverId}, ETA: ${etaSeconds}s (${etaDistance}m)`);
         return {
             id: updatedTrip.id,
             status: updatedTrip.status,

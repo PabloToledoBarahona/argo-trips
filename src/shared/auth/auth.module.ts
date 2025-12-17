@@ -1,7 +1,11 @@
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { JwtPayloadMiddleware } from './middleware/jwt-payload.middleware.js';
+import { ServiceTokenService } from './services/service-token.service.js';
 
-@Module({})
+@Module({
+  providers: [ServiceTokenService],
+  exports: [ServiceTokenService],
+})
 export class AuthModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
     consumer.apply(JwtPayloadMiddleware).forRoutes('*');

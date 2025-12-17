@@ -6,20 +6,16 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AuthModule = void 0;
+exports.RateLimiterModule = void 0;
 const common_1 = require("@nestjs/common");
-const jwt_payload_middleware_js_1 = require("./middleware/jwt-payload.middleware.js");
-const service_token_service_js_1 = require("./services/service-token.service.js");
-let AuthModule = class AuthModule {
-    configure(consumer) {
-        consumer.apply(jwt_payload_middleware_js_1.JwtPayloadMiddleware).forRoutes('*');
-    }
+const token_bucket_rate_limiter_js_1 = require("./token-bucket.rate-limiter.js");
+let RateLimiterModule = class RateLimiterModule {
 };
-exports.AuthModule = AuthModule;
-exports.AuthModule = AuthModule = __decorate([
+exports.RateLimiterModule = RateLimiterModule;
+exports.RateLimiterModule = RateLimiterModule = __decorate([
     (0, common_1.Module)({
-        providers: [service_token_service_js_1.ServiceTokenService],
-        exports: [service_token_service_js_1.ServiceTokenService],
+        providers: [token_bucket_rate_limiter_js_1.TokenBucketRateLimiter],
+        exports: [token_bucket_rate_limiter_js_1.TokenBucketRateLimiter],
     })
-], AuthModule);
-//# sourceMappingURL=auth.module.js.map
+], RateLimiterModule);
+//# sourceMappingURL=rate-limiter.module.js.map

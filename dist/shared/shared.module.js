@@ -13,13 +13,31 @@ const redis_module_js_1 = require("./redis/redis.module.js");
 const logger_module_js_1 = require("./logger/logger.module.js");
 const auth_module_js_1 = require("./auth/auth.module.js");
 const idempotency_module_js_1 = require("./idempotency/idempotency.module.js");
+const rate_limiter_module_js_1 = require("./rate-limiter/rate-limiter.module.js");
+const cache_module_js_1 = require("./cache/cache.module.js");
 let SharedModule = class SharedModule {
 };
 exports.SharedModule = SharedModule;
 exports.SharedModule = SharedModule = __decorate([
     (0, common_1.Module)({
-        imports: [http_module_js_1.HttpModule, redis_module_js_1.RedisModule, logger_module_js_1.LoggerModule, auth_module_js_1.AuthModule, idempotency_module_js_1.IdempotencyModule],
-        exports: [http_module_js_1.HttpModule, redis_module_js_1.RedisModule, logger_module_js_1.LoggerModule, auth_module_js_1.AuthModule, idempotency_module_js_1.IdempotencyModule],
+        imports: [
+            http_module_js_1.HttpModule,
+            redis_module_js_1.RedisModule,
+            logger_module_js_1.LoggerModule,
+            auth_module_js_1.AuthModule,
+            idempotency_module_js_1.IdempotencyModule,
+            rate_limiter_module_js_1.RateLimiterModule,
+            cache_module_js_1.CacheModule,
+        ],
+        exports: [
+            http_module_js_1.HttpModule,
+            redis_module_js_1.RedisModule,
+            logger_module_js_1.LoggerModule,
+            auth_module_js_1.AuthModule,
+            idempotency_module_js_1.IdempotencyModule,
+            rate_limiter_module_js_1.RateLimiterModule,
+            cache_module_js_1.CacheModule,
+        ],
     })
 ], SharedModule);
 //# sourceMappingURL=shared.module.js.map

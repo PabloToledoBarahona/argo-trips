@@ -8,6 +8,7 @@ import { PricingClient, QuoteRequest, QuoteResponse } from '../../infrastructure
 import { PricingSnapshot, Trip } from '../../domain/entities/trip.entity.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
 import { mapToPricingVehicleType } from '../shared/vehicle-type.mapper.js';
+import { mapToGeoProfile } from '../shared/geo-profile.mapper.js';
 
 @Injectable()
 export class CreateTripUseCase {
@@ -36,40 +37,60 @@ export class CreateTripUseCase {
     let distanceMeters: number | undefined;
     let durationSeconds: number | undefined;
 
-    // Resolve H3 indexes (res7 + res9) and distance with graceful degradation
+    const geoProfile = mapToGeoProfile(dto.vehicleType);
+
+    // Resolve H3 indexes (res7 + res9) using batch operation with graceful degradation
     try {
-      const originH3 = await this.geoClient.h3(originCoordinates.lat, originCoordinates.lng);
-      originH3Res7 = originH3.h3_res7;
-      originH3Res9 = originH3.h3_res9;
+      const h3Response = await this.geoClient.h3Encode({
+        ops: [
+          { op: 'encode', lat: dto.originLat, lng: dto.originLng, res: 9 },
+          { op: 'encode', lat: dto.originLat, lng: dto.originLng, res: 7 },
+          { op: 'encode', lat: dto.destLat, lng: dto.destLng, res: 9 },
+          { op: 'encode', lat: dto.destLat, lng: dto.destLng, res: 7 },
+        ],
+      });
+
+      // Extract results (order matches request ops)
+      const [originRes9Result, originRes7Result, destRes9Result, destRes7Result] = h3Response.results;
+
+      if (originRes9Result.op === 'encode' && !('error' in originRes9Result)) {
+        originH3Res9 = originRes9Result.h3;
+      }
+      if (originRes7Result.op === 'encode' && !('error' in originRes7Result)) {
+        originH3Res7 = originRes7Result.h3;
+      }
+      if (destRes9Result.op === 'encode' && !('error' in destRes9Result)) {
+        destH3Res9 = destRes9Result.h3;
+      }
+      if (destRes7Result.op === 'encode' && !('error' in destRes7Result)) {
+        destH3Res7 = destRes7Result.h3;
+      }
     } catch (error) {
       this.logger.error(
-        `Failed to resolve origin H3 for trip ${tripId}: ${this.formatError(error)}`,
+        `Failed to resolve H3 indexes for trip ${tripId}: ${this.formatError(error)}`,
       );
     }
 
+    // Calculate route (distance and duration) with graceful degradation
     try {
-      const destinationH3 = await this.geoClient.h3(
-        destinationCoordinates.lat,
-        destinationCoordinates.lng,
-      );
-      destH3Res7 = destinationH3.h3_res7;
-      destH3Res9 = destinationH3.h3_res9;
-    } catch (error) {
-      this.logger.error(
-        `Failed to resolve destination H3 for trip ${tripId}: ${this.formatError(error)}`,
-      );
-    }
+      const routeResponse = await this.geoClient.route({
+        origin: originCoordinates,
+        destination: destinationCoordinates,
+        profile: geoProfile,
+        city: dto.city,
+        include_polyline: false,
+        alternatives: 0,
+      });
 
-    try {
-      const distanceResponse = await this.geoClient.distance(
-        originCoordinates,
-        destinationCoordinates,
+      distanceMeters = routeResponse.distance_m;
+      durationSeconds = routeResponse.duration_sec;
+
+      this.logger.debug(
+        `Route calculated for trip ${tripId}: ${distanceMeters}m, ${durationSeconds}s, engine=${routeResponse.engine}`,
       );
-      distanceMeters = distanceResponse.distanceMeters;
-      durationSeconds = distanceResponse.durationSeconds;
     } catch (error) {
       this.logger.error(
-        `Geo distance failed for trip ${tripId}: ${this.formatError(error)}`,
+        `GEO route failed for trip ${tripId}: ${this.formatError(error)}. Will use Pricing service fallback.`,
       );
     }
 

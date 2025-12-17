@@ -7,6 +7,7 @@ import { GeoClient } from '../../infrastructure/http-clients/geo.client.js';
 import { PinCacheService } from '../../infrastructure/redis/pin-cache.service.js';
 import { TimerService } from '../../infrastructure/redis/timer.service.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
+import { mapToGeoProfile } from '../shared/geo-profile.mapper.js';
 
 @Injectable()
 export class AcceptTripUseCase {
@@ -53,12 +54,31 @@ export class AcceptTripUseCase {
     }
 
     // Calculate ETA from driver's location to pickup
-    const etaResponse = await this.geoClient.eta(
-      {
-        lat: driverSession.lastLocation.lat,
-        lng: driverSession.lastLocation.lng,
-      },
-      { lat: trip.originLat, lng: trip.originLng },
+    const geoProfile = mapToGeoProfile(trip.vehicleType);
+
+    const etaResponse = await this.geoClient.eta({
+      origins: [
+        {
+          lat: driverSession.lastLocation.lat,
+          lng: driverSession.lastLocation.lng,
+        },
+      ],
+      destinations: [{ lat: trip.originLat, lng: trip.originLng }],
+      profile: geoProfile,
+      city: trip.city,
+    });
+
+    // Extract ETA from first (and only) pair
+    const etaPair = etaResponse.pairs[0];
+    if (!etaPair) {
+      throw new BadRequestException('Failed to calculate ETA: no results from GEO service');
+    }
+
+    const etaSeconds = etaPair.duration_sec;
+    const etaDistance = etaPair.distance_m;
+
+    this.logger.debug(
+      `ETA calculated for driver ${dto.driverId} to pickup: ${etaSeconds}s, ${etaDistance}m, engine=${etaResponse.engine}`,
     );
 
     // Generate 4-digit PIN
@@ -87,12 +107,15 @@ export class AcceptTripUseCase {
       payload: {
         previousStatus: trip.status,
         newStatus: TripStatus.ASSIGNED,
-        etaSeconds: etaResponse.etaSeconds,
+        etaSeconds,
+        etaDistanceMeters: etaDistance,
+        geoEngine: etaResponse.engine,
+        geoDegradation: etaResponse.degradation,
       },
     });
 
     this.logger.log(
-      `Trip ${trip.id} accepted by driver ${dto.driverId}, ETA: ${etaResponse.etaSeconds}s`,
+      `Trip ${trip.id} accepted by driver ${dto.driverId}, ETA: ${etaSeconds}s (${etaDistance}m)`,
     );
 
     return {
