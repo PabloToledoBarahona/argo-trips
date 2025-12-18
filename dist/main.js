@@ -12,7 +12,6 @@ async function bootstrap() {
         forbidNonWhitelisted: true,
         transform: true,
     }));
-    app.setGlobalPrefix('api/trips');
     app.enableCors();
     const port = process.env.PORT || 3000;
     await app.listen(port);

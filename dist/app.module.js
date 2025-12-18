@@ -11,6 +11,7 @@ const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const shared_module_js_1 = require("./shared/shared.module.js");
 const trips_module_js_1 = require("./trips/trips.module.js");
+const health_module_js_1 = require("./health/health.module.js");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -22,6 +23,7 @@ exports.AppModule = AppModule = __decorate([
                 envFilePath: '.env',
             }),
             shared_module_js_1.SharedModule,
+            health_module_js_1.HealthModule,
             trips_module_js_1.TripsModule,
         ],
         controllers: [],

@@ -18,8 +18,8 @@ async function bootstrap() {
     }),
   );
 
-  // Set global prefix
-  app.setGlobalPrefix('api/trips');
+  // No global prefix - Gateway handles /trips routing
+  // app.setGlobalPrefix('api/trips');
 
   // Enable CORS
   app.enableCors();

@@ -12,7 +12,10 @@ const jwt_payload_middleware_js_1 = require("./middleware/jwt-payload.middleware
 const service_token_service_js_1 = require("./services/service-token.service.js");
 let AuthModule = class AuthModule {
     configure(consumer) {
-        consumer.apply(jwt_payload_middleware_js_1.JwtPayloadMiddleware).forRoutes('*');
+        consumer
+            .apply(jwt_payload_middleware_js_1.JwtPayloadMiddleware)
+            .exclude({ path: 'health', method: common_1.RequestMethod.GET }, { path: 'healthz', method: common_1.RequestMethod.GET })
+            .forRoutes('*');
     }
 };
 exports.AuthModule = AuthModule;

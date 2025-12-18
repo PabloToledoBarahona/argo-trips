@@ -1,0 +1,559 @@
+static_resources:
+  listeners:
+    - name: listener_http
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 8080
+
+      filter_chains:
+        - filters:
+            - name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                stat_prefix: ingress_http
+                generate_request_id: true
+                use_remote_address: true
+                request_headers_timeout: 3s
+                stream_idle_timeout: 30s
+                common_http_protocol_options:
+                  idle_timeout: 60s
+                  max_headers_count: 100
+                  headers_with_underscores_action: REJECT_REQUEST
+                upgrade_configs:
+                  - upgrade_type: websocket
+
+                http_filters:
+                  # ==========================================================
+                  # JWT Authentication
+                  # ==========================================================
+                  - name: envoy.filters.http.jwt_authn
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication
+                      providers:
+                        argo_jwt:
+                          issuer: "argo-auth"
+                          audiences: ["argo-clients"]
+                          remote_jwks:
+                            http_uri:
+                              uri: "http://alb-argo-auth-445055172.us-east-2.elb.amazonaws.com/.well-known/jwks.json"
+                              cluster: jwks_cluster
+                              timeout: 2s
+                            cache_duration: 300s
+                          from_headers:
+                            - name: Authorization
+                              value_prefix: "Bearer "
+                          from_cookies:
+                            - "access_token"
+                          forward_payload_header: "X-JWT-Payload"
+                          forward: true
+
+                      rules:
+                        # CORS preflight
+                        - match:
+                            prefix: "/"
+                            headers:
+                              - name: ":method"
+                                string_match:
+                                  exact: "OPTIONS"
+                          requires:
+                            allow_missing_or_failed: {}
+
+                        # ======================================================
+                        # Public routes - Health Checks
+                        # ======================================================
+                        - match: { path: "/healthz" }
+                          requires: { allow_missing: {} }
+                        - match: { path: "/auth/health" }
+                          requires: { allow_missing: {} }
+                        - match: { path: "/profiles/healthz" }
+                          requires: { allow_missing: {} }
+                        - match: { path: "/pricing/health" }
+                          requires: { allow_missing: {} }
+                        - match: { path: "/geo/health" }
+                          requires: { allow_missing: {} }
+                        - match: { path: "/driver-sessions/healthz" }
+                          requires: { allow_missing: {} }
+                        - match: { path: "/trips/health" }
+                          requires: { allow_missing: {} }
+
+                        # ======================================================
+                        # Public routes - Application
+                        # ======================================================
+                        - match: { path: "/.well-known/jwks.json" }
+                          requires: { allow_missing: {} }
+                        - match: { prefix: "/auth/otp/" }
+                          requires: { allow_missing: {} }
+                        - match: { path: "/auth/refresh" }
+                          requires: { allow_missing: {} }
+                        - match: { path: "/auth/admin/login" }
+                          requires: { allow_missing: {} }
+                        - match: { prefix: "/auth/riders/signup" }
+                          requires: { allow_missing: {} }
+                        - match: { prefix: "/auth/drivers/signup" }
+                          requires: { allow_missing: {} }
+                        - match: { path: "/auth/riders/login" }
+                          requires: { allow_missing: {} }
+                        - match: { path: "/auth/drivers/login" }
+                          requires: { allow_missing: {} }
+
+                        # ======================================================
+                        # Protected routes - Application
+                        # ======================================================
+                        - match: { prefix: "/geo" }
+                          requires: { provider_name: "argo_jwt" }
+                        - match: { prefix: "/pricing" }
+                          requires: { provider_name: "argo_jwt" }
+                        - match: { prefix: "/profiles" }
+                          requires: { provider_name: "argo_jwt" }
+                        - match: { prefix: "/auth" }
+                          requires: { provider_name: "argo_jwt" }
+                        - match: { prefix: "/driver-sessions" }
+                          requires: { provider_name: "argo_jwt" }
+                        - match: { prefix: "/trips" }
+                          requires: { provider_name: "argo_jwt" }
+
+                  # ==========================================================
+                  # GZIP Compression
+                  # ==========================================================
+                  - name: envoy.filters.http.compressor
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.compressor.v3.Compressor
+                      compressor_library:
+                        name: gzip
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.compression.gzip.compressor.v3.Gzip
+                      response_direction_config:
+                        common_config:
+                          min_content_length: 1024
+
+                  # ==========================================================
+                  # CORS
+                  # ==========================================================
+                  - name: envoy.filters.http.cors
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.Cors
+
+                  # ==========================================================
+                  # Rate Limiter
+                  # ==========================================================
+                  - name: envoy.filters.http.local_ratelimit
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.local_ratelimit.v3.LocalRateLimit
+                      stat_prefix: http_local_rate_limiter
+                      stage: 0
+                      token_bucket:
+                        max_tokens: 500
+                        tokens_per_fill: 500
+                        fill_interval: 1s
+                      filter_enabled:
+                        default_value: { numerator: 100, denominator: HUNDRED }
+                      filter_enforced:
+                        default_value: { numerator: 100, denominator: HUNDRED }
+                      response_headers_to_add:
+                        - append: false
+                          header: { key: x-rate-limit, value: "applied" }
+
+                  # ==========================================================
+                  # Router
+                  # ==========================================================
+                  - name: envoy.filters.http.router
+                    typed_config:
+                      "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+
+                # ==========================================================
+                # ROUTES
+                # ==========================================================
+                route_config:
+                  name: local_route
+                  virtual_hosts:
+                    - name: api
+                      domains: ["*"]
+
+                      cors:
+                        allow_origin_string_match:
+                          - exact: "http://localhost:5173"
+                          - exact: "http://localhost:5174"
+                          - exact: "http://localhost:3000"
+                          - exact: "https://app.argo.bo"
+                          - prefix: "https://staging."
+                          - prefix: "https://dev."
+                        allow_methods: "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+                        allow_headers: "Content-Type, Authorization, X-Request-ID, X-Device-ID, Idempotency-Key, Cache-Control, Pragma"
+                        expose_headers: "Set-Cookie, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset, X-Request-ID"
+                        allow_credentials: true
+                        max_age: "86400"
+
+                      routes:
+                        # ======================================================
+                        # Gateway Health Check
+                        # ======================================================
+                        - match: { path: "/healthz" }
+                          direct_response:
+                            status: 200
+                            body:
+                              inline_string: '{"status":"healthy","service":"argo-gateway"}'
+
+                        # ======================================================
+                        # Auth Service
+                        # ======================================================
+                        - match: { prefix: "/auth" }
+                          route:
+                            cluster: argo_auth
+                            timeout: 30s
+                            retry_policy:
+                              retry_on: "5xx,reset,connect-failure,refused-stream"
+                              num_retries: 2
+                              per_try_timeout: 10s
+                          response_headers_to_add:
+                            - header:
+                                key: "X-Gateway-Version"
+                                value: "1.0.0"
+                              append: false
+
+                        # ======================================================
+                        # Geo Service (MS10)
+                        # ======================================================
+                        - match: { prefix: "/geo" }
+                          route:
+                            cluster: argo_geo
+                            regex_rewrite:
+                              pattern:
+                                google_re2: {}
+                                regex: "^/geo(.*)"
+                              substitution: "\\1"
+                            timeout: 30s
+                            retry_policy:
+                              retry_on: "5xx,reset,connect-failure"
+                              num_retries: 2
+                              per_try_timeout: 10s
+                          response_headers_to_add:
+                            - header:
+                                key: "X-Gateway-Version"
+                                value: "1.0.0"
+                              append: false
+
+                        # ======================================================
+                        # Pricing Service (MS06)
+                        # ======================================================
+                        - match: { prefix: "/pricing" }
+                          route:
+                            cluster: argo_pricing
+                            regex_rewrite:
+                              pattern:
+                                google_re2: {}
+                                regex: "^/pricing(.*)"
+                              substitution: "\\1"
+                            timeout: 30s
+                            retry_policy:
+                              retry_on: "5xx,reset,connect-failure"
+                              num_retries: 2
+                              per_try_timeout: 10s
+                          response_headers_to_add:
+                            - header:
+                                key: "X-Gateway-Version"
+                                value: "1.0.0"
+                              append: false
+
+                        # ======================================================
+                        # Profiles Service (MS02)
+                        # ======================================================
+                        - match: { prefix: "/profiles" }
+                          route:
+                            cluster: argo_profiles
+                            regex_rewrite:
+                              pattern:
+                                google_re2: {}
+                                regex: "^/profiles(.*)"
+                              substitution: "\\1"
+                            timeout: 30s
+                            retry_policy:
+                              retry_on: "5xx,reset,connect-failure"
+                              num_retries: 2
+                              per_try_timeout: 10s
+                          response_headers_to_add:
+                            - header:
+                                key: "X-Gateway-Version"
+                                value: "1.0.0"
+                              append: false
+
+                        # ======================================================
+                        # Driver Sessions (WebSocket)
+                        # ======================================================
+                        - match: { prefix: "/driver-sessions/socket.io" }
+                          route:
+                            cluster: argo_driver_sessions
+                            regex_rewrite:
+                              pattern:
+                                google_re2: {}
+                                regex: "^/driver-sessions(.*)"
+                              substitution: "\\1"
+                            timeout: 0s
+                            idle_timeout: 3600s
+                            max_stream_duration:
+                              max_stream_duration: 0s
+                            upgrade_configs:
+                              - upgrade_type: websocket
+                          response_headers_to_add:
+                            - header:
+                                key: "X-Gateway-Version"
+                                value: "1.0.0"
+                              append: false
+
+                        # ======================================================
+                        # Driver Sessions (REST)
+                        # ======================================================
+                        - match: { prefix: "/driver-sessions" }
+                          route:
+                            cluster: argo_driver_sessions
+                            regex_rewrite:
+                              pattern:
+                                google_re2: {}
+                                regex: "^/driver-sessions(.*)"
+                              substitution: "\\1"
+                            timeout: 30s
+                            retry_policy:
+                              retry_on: "5xx,reset,connect-failure"
+                              num_retries: 2
+                              per_try_timeout: 10s
+                          response_headers_to_add:
+                            - header:
+                                key: "X-Gateway-Version"
+                                value: "1.0.0"
+                              append: false
+
+                        # ======================================================
+                        # Trips Service (MS04)
+                        # ======================================================
+                        - match: { prefix: "/trips" }
+                          route:
+                            cluster: argo_trips
+                            regex_rewrite:
+                              pattern:
+                                google_re2: {}
+                                regex: "^/trips(.*)"
+                              substitution: "\\1"
+                            timeout: 30s
+                            retry_policy:
+                              retry_on: "5xx,reset,connect-failure"
+                              num_retries: 2
+                              per_try_timeout: 10s
+                          response_headers_to_add:
+                            - header:
+                                key: "X-Gateway-Version"
+                                value: "1.0.0"
+                              append: false
+
+                        # ======================================================
+                        # Default 404
+                        # ======================================================
+                        - match: { prefix: "/" }
+                          direct_response:
+                            status: 404
+                            body:
+                              inline_string: '{"error":"Not Found","message":"Route not configured in gateway"}'
+
+  # ==========================================================
+  # CLUSTERS
+  # ==========================================================
+  clusters:
+    - name: argo_auth
+      connect_timeout: 2s
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      load_assignment:
+        cluster_name: argo_auth
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: alb-argo-auth-445055172.us-east-2.elb.amazonaws.com
+                      port_value: 80
+      health_checks:
+        - timeout: 2s
+          interval: 10s
+          unhealthy_threshold: 3
+          healthy_threshold: 2
+          http_health_check:
+            path: "/auth/health"
+            expected_statuses:
+              - start: 200
+                end: 299
+
+    - name: jwks_cluster
+      connect_timeout: 2s
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      load_assignment:
+        cluster_name: jwks_cluster
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: alb-argo-auth-445055172.us-east-2.elb.amazonaws.com
+                      port_value: 80
+      health_checks:
+        - timeout: 2s
+          interval: 30s
+          unhealthy_threshold: 3
+          healthy_threshold: 2
+          http_health_check:
+            path: "/.well-known/jwks.json"
+            expected_statuses:
+              - start: 200
+                end: 299
+
+    # ==========================================================
+    # Geo Cluster (MS10)
+    # ==========================================================
+    - name: argo_geo
+      connect_timeout: 2s
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      load_assignment:
+        cluster_name: argo_geo
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: alb-argo-geo-526992758.us-east-2.elb.amazonaws.com
+                      port_value: 80
+      health_checks:
+        - timeout: 2s
+          interval: 10s
+          unhealthy_threshold: 3
+          healthy_threshold: 2
+          http_health_check:
+            path: "/health"
+            expected_statuses:
+              - start: 200
+                end: 299
+
+    # ==========================================================
+    # Pricing Cluster (MS06)
+    # ==========================================================
+    - name: argo_pricing
+      connect_timeout: 2s
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      load_assignment:
+        cluster_name: argo_pricing
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: alb-argo-pricing-1203739586.us-east-2.elb.amazonaws.com
+                      port_value: 80
+      health_checks:
+        - timeout: 2s
+          interval: 10s
+          unhealthy_threshold: 3
+          healthy_threshold: 2
+          http_health_check:
+            path: "/health"
+            expected_statuses:
+              - start: 200
+                end: 299
+
+    # ==========================================================
+    # Profiles Cluster (MS02)
+    # ==========================================================
+    - name: argo_profiles
+      connect_timeout: 2s
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      load_assignment:
+        cluster_name: argo_profiles
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: alb-argo-profiles-309777916.us-east-2.elb.amazonaws.com
+                      port_value: 80
+      health_checks:
+        - timeout: 2s
+          interval: 10s
+          unhealthy_threshold: 3
+          healthy_threshold: 2
+          http_health_check:
+            path: "/healthz"
+            expected_statuses:
+              - start: 200
+                end: 299
+
+    # ==========================================================
+    # Driver Sessions Cluster (MS03)
+    # ==========================================================
+    - name: argo_driver_sessions
+      connect_timeout: 2s
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      load_assignment:
+        cluster_name: argo_driver_sessions
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: alb-argo-driver-sessions-817045530.us-east-2.elb.amazonaws.com
+                      port_value: 80
+
+      typed_extension_protocol_options:
+        envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+          "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+          common_http_protocol_options:
+            idle_timeout: 3600s
+          explicit_http_config:
+            http_protocol_options: {}
+
+      health_checks:
+        - timeout: 2s
+          interval: 30s
+          unhealthy_threshold: 3
+          healthy_threshold: 2
+          http_health_check:
+            path: "/healthz"
+            expected_statuses:
+              - start: 200
+                end: 299
+
+    # ==========================================================
+    # Trips Cluster (MS04)
+    # ==========================================================
+    - name: argo_trips
+      connect_timeout: 2s
+      type: STRICT_DNS
+      dns_lookup_family: V4_ONLY
+      load_assignment:
+        cluster_name: argo_trips
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      # TODO: Replace with actual ALB DNS when service is deployed
+                      # Pattern: alb-argo-trips-XXXXXXXXXX.us-east-2.elb.amazonaws.com
+                      address: alb-argo-trips.us-east-2.elb.amazonaws.com
+                      port_value: 80
+      health_checks:
+        - timeout: 2s
+          interval: 10s
+          unhealthy_threshold: 3
+          healthy_threshold: 2
+          http_health_check:
+            path: "/health"
+            expected_statuses:
+              - start: 200
+                end: 299
+
+admin:
+  access_log_path: /tmp/admin_access.log
+  address:
+    socket_address:
+      address: 0.0.0.0
+      port_value: 9901
