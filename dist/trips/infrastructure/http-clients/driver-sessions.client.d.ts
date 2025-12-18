@@ -1,23 +1,53 @@
+import { OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '../../../shared/http/http.service.js';
-export interface DriverLocation {
+import { ServiceTokenService } from '../../../shared/auth/services/service-token.service.js';
+import { TokenBucketRateLimiter } from '../../../shared/rate-limiter/token-bucket.rate-limiter.js';
+export interface DriverLastLocation {
     lat: number;
     lng: number;
     h3_res9: string;
+    speed_mps: number;
+    heading_deg: number;
+    ts: string;
 }
-export type VehicleType = 'economy' | 'premium' | 'delivery';
+export interface DriverEligibility {
+    ok: boolean;
+    status: 'ACTIVE' | 'SUSPENDED' | 'INACTIVE';
+}
 export interface DriverSessionResponse {
-    driverId: string;
-    isOnline: boolean;
-    vehicleType: VehicleType;
-    lastLocation: DriverLocation;
-    lastUpdate: string;
+    driver_id: string;
+    online: boolean;
+    last_loc: DriverLastLocation | null;
+    trip_id: string | null;
+    eligibility: DriverEligibility;
 }
-export declare class DriverSessionsClient {
+export interface NearbyDriversRequest {
+    h3: string;
+    k?: number;
+    limit?: number;
+}
+export interface NearbyDriversResponse {
+    drivers: string[];
+    queried_cells: string[];
+}
+export declare class DriverSessionsClient implements OnModuleInit {
     private readonly httpService;
     private readonly configService;
+    private readonly serviceTokenService;
+    private readonly rateLimiter;
     private readonly logger;
     private readonly baseUrl;
-    constructor(httpService: HttpService, configService: ConfigService);
+    private readonly sessionCircuitBreaker;
+    private readonly nearbyCircuitBreaker;
+    private readonly SESSION_TIMEOUT_MS;
+    private readonly NEARBY_TIMEOUT_MS;
+    constructor(httpService: HttpService, configService: ConfigService, serviceTokenService: ServiceTokenService, rateLimiter: TokenBucketRateLimiter);
+    onModuleInit(): void;
     getSession(driverId: string): Promise<DriverSessionResponse>;
+    findNearbyDrivers(request: NearbyDriversRequest): Promise<NearbyDriversResponse>;
+    private validateDriverId;
+    private validateSessionResponse;
+    private validateNearbyRequest;
+    private validateNearbyResponse;
 }

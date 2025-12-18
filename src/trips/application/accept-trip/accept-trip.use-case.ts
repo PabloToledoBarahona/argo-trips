@@ -40,16 +40,23 @@ export class AcceptTripUseCase {
       );
     }
 
-    // Validate driver is online
+    // Validate driver is online and eligible
     const driverSession = await this.driverSessionsClient.getSession(dto.driverId);
-    if (!driverSession.isOnline) {
+
+    if (!driverSession.online) {
       throw new BadRequestException(`Driver ${dto.driverId} is not online`);
     }
 
-    // Validate vehicle type matches
-    if (driverSession.vehicleType !== trip.vehicleType) {
+    if (!driverSession.eligibility.ok) {
       throw new BadRequestException(
-        `Driver vehicle type ${driverSession.vehicleType} does not match trip requirement ${trip.vehicleType}`,
+        `Driver ${dto.driverId} is not eligible: ${driverSession.eligibility.status}`,
+      );
+    }
+
+    // Validate driver has sent location data
+    if (!driverSession.last_loc) {
+      throw new BadRequestException(
+        `Driver ${dto.driverId} has no location data available`,
       );
     }
 
@@ -59,8 +66,8 @@ export class AcceptTripUseCase {
     const etaResponse = await this.geoClient.eta({
       origins: [
         {
-          lat: driverSession.lastLocation.lat,
-          lng: driverSession.lastLocation.lng,
+          lat: driverSession.last_loc.lat,
+          lng: driverSession.last_loc.lng,
         },
       ],
       destinations: [{ lat: trip.originLat, lng: trip.originLng }],

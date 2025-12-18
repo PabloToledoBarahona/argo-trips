@@ -12,10 +12,10 @@ const common_1 = require("@nestjs/common");
 let DriverSessionsEventsHandler = DriverSessionsEventsHandler_1 = class DriverSessionsEventsHandler {
     logger = new common_1.Logger(DriverSessionsEventsHandler_1.name);
     async handleDriverAvailabilityChanged(event) {
-        this.logger.log(`Driver ${event.driverId} availability: ${event.available}`);
+        this.logger.log(`[UNUSED] Driver ${event.driverId} availability: ${event.available}`);
     }
     async handleDriverLocationUpdated(event) {
-        this.logger.debug(`Driver ${event.driverId} location updated`);
+        this.logger.debug(`[UNUSED] Driver ${event.driverId} location updated`);
     }
 };
 exports.DriverSessionsEventsHandler = DriverSessionsEventsHandler;

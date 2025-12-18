@@ -48,18 +48,21 @@ let AcceptTripUseCase = AcceptTripUseCase_1 = class AcceptTripUseCase {
             throw new common_1.BadRequestException(`Trip ${dto.tripId} cannot be accepted from status ${trip.status}`);
         }
         const driverSession = await this.driverSessionsClient.getSession(dto.driverId);
-        if (!driverSession.isOnline) {
+        if (!driverSession.online) {
             throw new common_1.BadRequestException(`Driver ${dto.driverId} is not online`);
         }
-        if (driverSession.vehicleType !== trip.vehicleType) {
-            throw new common_1.BadRequestException(`Driver vehicle type ${driverSession.vehicleType} does not match trip requirement ${trip.vehicleType}`);
+        if (!driverSession.eligibility.ok) {
+            throw new common_1.BadRequestException(`Driver ${dto.driverId} is not eligible: ${driverSession.eligibility.status}`);
+        }
+        if (!driverSession.last_loc) {
+            throw new common_1.BadRequestException(`Driver ${dto.driverId} has no location data available`);
         }
         const geoProfile = (0, geo_profile_mapper_js_1.mapToGeoProfile)(trip.vehicleType);
         const etaResponse = await this.geoClient.eta({
             origins: [
                 {
-                    lat: driverSession.lastLocation.lat,
-                    lng: driverSession.lastLocation.lng,
+                    lat: driverSession.last_loc.lat,
+                    lng: driverSession.last_loc.lng,
                 },
             ],
             destinations: [{ lat: trip.originLat, lng: trip.originLng }],
