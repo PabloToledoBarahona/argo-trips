@@ -1,0 +1,495 @@
+{
+  "info": {
+    "name": "MS04-TRIPS API - Production Tests",
+    "description": "Colección completa de testing para MS04-TRIPS en AWS\n\n## Configuración Inicial\n\n1. **Importar colección**: Importa este archivo en Postman\n2. **Variables de entorno**: Las variables ya están configuradas\n3. **JWT Token**: Actualiza la variable `jwt_token` con un token válido de MS02-AUTH\n4. **Flujo completo**: Ejecuta los requests en orden para probar el ciclo completo del viaje\n\n## Endpoints Disponibles\n\n- ✅ Health Check\n- ✅ Create Trip (POST /trips)\n- ✅ Accept Trip (PATCH /trips/:id/accept)\n- ✅ Verify PIN (POST /trips/:id/pin/verify)\n- ✅ Start Trip (PATCH /trips/:id/start)\n- ✅ Complete Trip (PATCH /trips/:id/complete)\n- ✅ Cancel Trip (PATCH /trips/:id/cancel)\n\n## Datos de Prueba\n\n- **RiderId**: `rider-12345`\n- **DriverId**: `driver-67890`\n- **City**: `columbus`\n- **VehicleType**: `sedan`\n- **Origin**: Columbus, OH (39.9612, -82.9988)\n- **Destination**: Ohio State University (40.0067, -83.0305)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "MS04-TRIPS"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{jwt_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "gateway_url",
+      "value": "http://alb-argo-gateway-1317937741.us-east-2.elb.amazonaws.com",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "YOUR_JWT_TOKEN_HERE",
+      "type": "string"
+    },
+    {
+      "key": "trip_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "rider_id",
+      "value": "rider-12345",
+      "type": "string"
+    },
+    {
+      "key": "driver_id",
+      "value": "driver-67890",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Checks",
+      "item": [
+        {
+          "name": "Health Check - Public",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway_url}}/trips/healthz",
+              "host": ["{{gateway_url}}"],
+              "path": ["trips", "healthz"]
+            },
+            "description": "Health check público sin autenticación"
+          },
+          "response": []
+        },
+        {
+          "name": "Health Check - Database",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Database is healthy', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql('ok');",
+                  "    pm.expect(jsonData.info.database.status).to.eql('up');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{gateway_url}}/trips/health",
+              "host": ["{{gateway_url}}"],
+              "path": ["trips", "health"]
+            },
+            "description": "Health check con verificación de base de datos"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Trip Lifecycle",
+      "item": [
+        {
+          "name": "1. Create Trip",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Trip created successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData).to.have.property('estimateTotal');",
+                  "    pm.expect(jsonData).to.have.property('quoteId');",
+                  "    pm.expect(jsonData.status).to.eql('PENDING');",
+                  "    ",
+                  "    // Guardar trip_id para usar en siguientes requests",
+                  "    pm.collectionVariables.set('trip_id', jsonData.id);",
+                  "});",
+                  "",
+                  "pm.test('Pricing breakdown is present', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('breakdown');",
+                  "    pm.expect(jsonData.breakdown).to.have.property('distancePrice');",
+                  "    pm.expect(jsonData.breakdown).to.have.property('timePrice');",
+                  "    pm.expect(jsonData.breakdown).to.have.property('serviceFee');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"riderId\": \"{{rider_id}}\",\n  \"vehicleType\": \"sedan\",\n  \"city\": \"columbus\",\n  \"originLat\": 39.9612,\n  \"originLng\": -82.9988,\n  \"originH3Res9\": \"89284a8371fffff\",\n  \"destLat\": 40.0067,\n  \"destLng\": -83.0305,\n  \"destH3Res9\": \"89284a8b57fffff\"\n}"
+            },
+            "url": {
+              "raw": "{{gateway_url}}/trips",
+              "host": ["{{gateway_url}}"],
+              "path": ["trips"]
+            },
+            "description": "Crea un nuevo viaje con pricing calculado desde Columbus downtown hasta Ohio State University"
+          },
+          "response": []
+        },
+        {
+          "name": "2. Accept Trip",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Trip accepted successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData).to.have.property('driverId');",
+                  "    pm.expect(jsonData).to.have.property('assignedAt');",
+                  "    pm.expect(jsonData.status).to.eql('ACCEPTED');",
+                  "    pm.expect(jsonData.driverId).to.eql(pm.collectionVariables.get('driver_id'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"driverId\": \"{{driver_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{gateway_url}}/trips/{{trip_id}}/accept",
+              "host": ["{{gateway_url}}"],
+              "path": ["trips", "{{trip_id}}", "accept"]
+            },
+            "description": "Driver acepta el viaje. Valida que el driver esté online y elegible con MS03-DRIVER-SESSIONS."
+          },
+          "response": []
+        },
+        {
+          "name": "3. Verify PIN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('PIN verified successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('verified');",
+                  "    pm.expect(jsonData).to.have.property('tripId');",
+                  "    pm.expect(jsonData.verified).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pin\": \"1234\"\n}"
+            },
+            "url": {
+              "raw": "{{gateway_url}}/trips/{{trip_id}}/pin/verify",
+              "host": ["{{gateway_url}}"],
+              "path": ["trips", "{{trip_id}}", "pin", "verify"]
+            },
+            "description": "Verifica el PIN del rider antes de iniciar el viaje"
+          },
+          "response": []
+        },
+        {
+          "name": "4. Start Trip",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Trip started successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData).to.have.property('startedAt');",
+                  "    pm.expect(jsonData.status).to.eql('IN_PROGRESS');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{gateway_url}}/trips/{{trip_id}}/start",
+              "host": ["{{gateway_url}}"],
+              "path": ["trips", "{{trip_id}}", "start"]
+            },
+            "description": "Inicia el viaje después de verificar el PIN"
+          },
+          "response": []
+        },
+        {
+          "name": "5. Complete Trip",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Trip completed successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData).to.have.property('completedAt');",
+                  "    pm.expect(jsonData).to.have.property('totalPrice');",
+                  "    pm.expect(jsonData).to.have.property('paymentIntentId');",
+                  "    pm.expect(jsonData.status).to.eql('COMPLETED');",
+                  "});",
+                  "",
+                  "pm.test('Final pricing calculated', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('taxes');",
+                  "    pm.expect(jsonData).to.have.property('min_fare_applied');",
+                  "    pm.expect(jsonData).to.have.property('pricing_rule_version');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"distance_m_final\": 5800,\n  \"duration_s_final\": 840\n}"
+            },
+            "url": {
+              "raw": "{{gateway_url}}/trips/{{trip_id}}/complete",
+              "host": ["{{gateway_url}}"],
+              "path": ["trips", "{{trip_id}}", "complete"]
+            },
+            "description": "Completa el viaje con distancia y tiempo final. Calcula precio final con MS06-PRICING."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Trip Cancellation",
+      "item": [
+        {
+          "name": "Cancel Trip - Rider",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Trip cancelled successfully', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('id');",
+                  "    pm.expect(jsonData).to.have.property('status');",
+                  "    pm.expect(jsonData).to.have.property('cancelAt');",
+                  "    pm.expect(jsonData).to.have.property('cancelReason');",
+                  "    pm.expect(jsonData).to.have.property('cancelSide');",
+                  "    pm.expect(jsonData.status).to.eql('CANCELLED');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"RIDER_CANCELLED\",\n  \"side\": \"rider\",\n  \"notes\": \"Changed plans\"\n}"
+            },
+            "url": {
+              "raw": "{{gateway_url}}/trips/{{trip_id}}/cancel",
+              "host": ["{{gateway_url}}"],
+              "path": ["trips", "{{trip_id}}", "cancel"]
+            },
+            "description": "Cancela un viaje por parte del rider. NOTA: Crear un nuevo trip antes de ejecutar este endpoint."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Trip - Driver",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Trip cancelled by driver', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.cancelSide).to.eql('driver');",
+                  "    pm.expect(jsonData.cancelReason).to.eql('DRIVER_CANCELLED');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"DRIVER_CANCELLED\",\n  \"side\": \"driver\",\n  \"notes\": \"Vehicle issue\"\n}"
+            },
+            "url": {
+              "raw": "{{gateway_url}}/trips/{{trip_id}}/cancel",
+              "host": ["{{gateway_url}}"],
+              "path": ["trips", "{{trip_id}}", "cancel"]
+            },
+            "description": "Cancela un viaje por parte del driver"
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel Trip - System Timeout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Trip cancelled by system', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.cancelSide).to.eql('system');",
+                  "    pm.expect(jsonData.cancelReason).to.eql('SYSTEM_TIMEOUT');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"SYSTEM_TIMEOUT\",\n  \"side\": \"system\",\n  \"notes\": \"No driver found after timeout\"\n}"
+            },
+            "url": {
+              "raw": "{{gateway_url}}/trips/{{trip_id}}/cancel",
+              "host": ["{{gateway_url}}"],
+              "path": ["trips", "{{trip_id}}", "cancel"]
+            },
+            "description": "Cancela un viaje por timeout del sistema"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
