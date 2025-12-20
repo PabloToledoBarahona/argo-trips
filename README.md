@@ -1,163 +1,412 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# MS04 - Trips Microservice
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+**MS04-TRIPS** is a production-ready NestJS microservice responsible for managing the complete lifecycle of ride-sharing trips in the Argo platform. Built with TypeScript and following clean architecture principles, it orchestrates trip creation, driver assignment, trip execution, and payment processing through seamless integration with multiple microservices.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Table of Contents
 
-## Description
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Technology Stack](#technology-stack)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Running the Application](#running-the-application)
+- [Testing](#testing)
+- [API Documentation](#api-documentation)
+- [Service Integrations](#service-integrations)
+- [Deployment](#deployment)
+- [Project Structure](#project-structure)
+- [Contributing](#contributing)
+- [License](#license)
 
-**MS04 - TRIPS** is a NestJS microservice for managing ride-sharing trips in the Argo platform. It handles the complete trip lifecycle from request to payment, integrating with multiple services including Pricing (MS06), Payments (MS07), Geo (MS10), Profiles (MS02), and Driver Sessions (MS03).
+## Overview
 
-## Architecture Overview
+MS04-TRIPS serves as the core orchestrator for trip management in the Argo ride-sharing platform. It handles:
 
-### Integration with MS06 - PRICING
+- Trip creation and lifecycle management (REQUESTED → ACCEPTED → PIN_VERIFIED → IN_PROGRESS → COMPLETED)
+- Integration with pricing service for dynamic fare calculation
+- Geospatial operations via H3 indexing and geocoding
+- Driver session validation and assignment
+- Payment intent creation upon trip completion
+- Real-time trip state transitions with validation
 
-TRIPS consumes the Pricing microservice (MS06) for dynamic pricing calculations:
+## Architecture
 
-#### During Trip Creation
-- **Endpoint**: `POST /pricing/quote`
-- **Purpose**: Get initial price estimate for trip request
-- **Request includes**:
-  - City, vehicle type, rider ID
-  - Origin/destination coordinates with H3 indices (res7/res9)
-  - Estimated distance and duration (when available)
-- **Response includes**:
-  - `quoteId`: Unique identifier for the quote
-  - `estimateTotal`: Total estimated price
-  - `basePrice`: Base fare
-  - `surgeMultiplier`: Dynamic pricing multiplier
-  - `currency`: Price currency (e.g., USD, EUR)
-  - `breakdown`: Price breakdown (distancePrice, timePrice, serviceFee, specialCharges)
-  - `distanceMeters`, `durationSeconds`: Route metrics
-- **Storage**: TRIPS persists a `pricingSnapshot` with all quote details for audit and consistency
+The service follows **Clean Architecture** principles with clear separation of concerns:
 
-#### During Trip Completion
-- **Endpoint**: `POST /pricing/finalize`
-- **Purpose**: Calculate final price with actual trip metrics
-- **Request includes**:
-  - `quoteId`: Original quote identifier
-  - `tripId`: Trip identifier (for idempotency)
-  - Actual distance and duration traveled
-- **Response includes**:
-  - `totalPrice`: Final price after applying actual metrics
-  - `basePrice`, `surgeMultiplier`, `currency`: Final pricing components
-  - `breakdown`: Final price breakdown with specialCharges
-  - `taxes`: Optional tax amount
-- **Storage**: TRIPS updates `pricingSnapshot` with final pricing details
-- **Next step**: TRIPS creates a payment intent with MS07-PAYMENTS using `totalPrice` and `currency`
-
-### Key Features
-
-- **Pricing Contract Alignment**: All pricing fields match MS06 specifications:
-  - Use `estimateTotal` (not `estimatedTotal`) for quotes
-  - Use `totalPrice` (not `finalPrice`) for completed trips
-  - Use `surgeMultiplier` (not `dynamicMultiplier`) for dynamic pricing
-  - Support for `taxes` and `specialCharges` in final pricing
-
-- **Graceful Degradation**:
-  - Falls back to client-provided H3 indices if GeoClient unavailable
-  - Uses estimated metrics when actual metrics not available
-  - Continues operation with partial data when possible
-
-- **Idempotency**: Pricing finalization is idempotent via `tripId` parameter
-
-### Exposed API Endpoints
-
-TRIPS exposes the following endpoints with full pricing details:
-
-- `POST /api/trips/trips` - Create trip
-  - Returns: `quoteId`, `estimateTotal`, `basePrice`, `surgeMultiplier`, `currency`, `breakdown`, `distanceMeters`, `durationSeconds`
-
-- `PATCH /api/trips/trips/:id/complete` - Complete trip
-  - Returns: `totalPrice`, `basePrice`, `surgeMultiplier`, `currency`, `breakdown`, `taxes`, `paymentIntentId`
-
-All pricing fields are exposed to clients through the Gateway for transparency and consistency.
-
-## Project setup
-
-```bash
-$ pnpm install
+```
+src/
+├── trips/
+│   ├── application/          # Use cases (business logic)
+│   ├── domain/               # Domain entities and value objects
+│   ├── infrastructure/       # External integrations (HTTP clients, DB)
+│   └── interfaces/           # HTTP controllers and DTOs
+├── shared/
+│   ├── auth/                 # JWT authentication & service tokens
+│   ├── circuit-breaker/      # Circuit breaker pattern implementation
+│   ├── rate-limiter/         # Token bucket rate limiting
+│   └── http/                 # Custom HTTP service with retry logic
+└── prisma/                   # Database schema and migrations
 ```
 
-## Compile and run the project
+### Key Architectural Patterns
+
+- **Clean Architecture**: Business logic isolated from infrastructure
+- **Domain-Driven Design**: Rich domain models with encapsulated business rules
+- **CQRS**: Separation of command and query responsibilities
+- **Circuit Breaker**: Fault tolerance for external service calls
+- **Rate Limiting**: Token bucket algorithm for API protection
+- **Repository Pattern**: Abstract data access layer
+
+## Features
+
+### Core Functionality
+
+- **Trip Lifecycle Management**: Complete state machine for trip progression
+- **Dynamic Pricing Integration**: Real-time fare calculation with surge pricing
+- **Geospatial Processing**: H3 indexing for location-based operations
+- **Driver Assignment**: Integration with driver session management
+- **Payment Processing**: Automated payment intent creation
+- **PIN Verification**: Secure rider verification before trip start
+
+### Production-Ready Features
+
+- **Service-to-Service Authentication**: JWT-based authentication with automatic token renewal
+- **Health Checks**: Comprehensive health endpoints with database connectivity checks
+- **Circuit Breaker Protection**: Automatic failover for external service calls
+- **Rate Limiting**: Request throttling per endpoint
+- **Structured Logging**: JSON-formatted logs with request correlation
+- **Graceful Degradation**: Fallback mechanisms for partial service availability
+- **Idempotency**: Safe retry mechanisms for critical operations
+
+## Technology Stack
+
+- **Runtime**: Node.js 20 LTS
+- **Framework**: NestJS 11.x
+- **Language**: TypeScript 5.x
+- **Database**: PostgreSQL (Neon serverless)
+- **Cache**: Redis (Upstash)
+- **ORM**: Prisma 6.x
+- **HTTP Client**: Axios with custom retry logic
+- **Geospatial**: H3 hexagonal hierarchical geospatial indexing
+- **Deployment**: AWS ECS Fargate
+- **Container**: Docker (multi-stage build)
+
+## Prerequisites
+
+- Node.js >= 20.0.0
+- pnpm >= 8.0.0
+- Docker (for containerized deployment)
+- PostgreSQL 14+ (or Neon serverless)
+- Redis 6+ (or Upstash)
+
+## Installation
 
 ```bash
-# development
-$ pnpm run start
+# Clone the repository
+git clone https://github.com/PabloToledoBarahona/argo-trips.git
+cd argo-trips
 
-# watch mode
-$ pnpm run start:dev
+# Install dependencies
+pnpm install
 
-# production mode
-$ pnpm run start:prod
+# Generate Prisma client
+pnpm exec prisma generate
+
+# Run database migrations
+pnpm exec prisma migrate deploy
 ```
 
-## Run tests
+## Configuration
+
+### Environment Variables
+
+Create a `.env` file in the project root with the following configuration:
 
 ```bash
-# unit tests
-$ pnpm run test
+# Database
+DATABASE_URL="postgresql://user:password@host:5432/argo-trips?sslmode=require"
 
-# e2e tests
-$ pnpm run test:e2e
+# Redis Cache
+REDIS_URL="rediss://default:password@host:6379"
 
-# test coverage
-$ pnpm run test:cov
+# Service URLs
+PRICING_SERVICE_URL="http://gateway-url/pricing"
+GEO_SERVICE_URL="http://gateway-url/geo"
+DRIVER_SESSIONS_SERVICE_URL="http://gateway-url/driver-sessions"
+AUTH_SERVICE_URL="http://gateway-url/auth"
+PAYMENTS_URL="http://gateway-url/payments"
+
+# Service Authentication
+SERVICE_ID="argo-trips"
+SERVICE_EMAIL="service-trips@argo.internal"
+SERVICE_PASSWORD="your-service-password"
+
+# Application
+PORT=3000
+NODE_ENV=production
 ```
+
+### Required Secrets
+
+For production deployment, the following secrets should be stored in AWS Secrets Manager:
+
+- `/argo/trips/database-url`: PostgreSQL connection string
+- `/argo/trips/redis-url`: Redis connection string
+
+## Running the Application
+
+### Development Mode
+
+```bash
+# Start with hot reload
+pnpm run start:dev
+
+# The service will be available at http://localhost:3000
+```
+
+### Production Mode
+
+```bash
+# Build the application
+pnpm run build
+
+# Start production server
+pnpm run start:prod
+```
+
+### Docker
+
+```bash
+# Build Docker image
+docker build -t argo-trips:latest .
+
+# Run container
+docker run -p 3000:3000 --env-file .env argo-trips:latest
+```
+
+## Testing
+
+### Available Testing Tools
+
+The repository includes comprehensive testing tools:
+
+1. **Postman Collection** (`postman-collection.json`)
+   - Pre-configured requests for all endpoints
+   - Automated assertions
+   - Environment variables management
+
+2. **Automated Test Script** (`test-endpoints.sh`)
+   - Bash script for automated testing
+   - Tests complete trip lifecycle
+   - Colored output with detailed results
+
+### Running Tests
+
+```bash
+# Unit tests
+pnpm run test
+
+# End-to-end tests
+pnpm run test:e2e
+
+# Test coverage
+pnpm run test:cov
+
+# Run automated endpoint tests
+./test-endpoints.sh <JWT_TOKEN>
+```
+
+For detailed testing instructions, see [TESTING.md](./TESTING.md).
+
+## API Documentation
+
+### Endpoints
+
+#### Health Checks
+
+- `GET /health` - Comprehensive health check with database status
+- `GET /healthz` - Simple health check for load balancers
+
+#### Trip Management
+
+- `POST /trips` - Create a new trip
+  - **Request**: `{ riderId, vehicleType, originLat, originLng, destLat, destLng, city }`
+  - **Response**: Trip details with pricing quote
+
+- `PATCH /trips/:id/accept` - Driver accepts trip
+  - **Request**: `{ driverId, estimatedArrivalMin }`
+  - **Response**: Updated trip with driver assignment
+
+- `POST /trips/:id/pin/verify` - Verify rider PIN
+  - **Request**: `{ pin }`
+  - **Response**: Verification status
+
+- `PATCH /trips/:id/start` - Start trip
+  - **Response**: Trip status updated to IN_PROGRESS
+
+- `PATCH /trips/:id/complete` - Complete trip
+  - **Request**: `{ finalLat, finalLng, distanceMeters, durationSeconds }`
+  - **Response**: Final pricing and payment intent
+
+- `PATCH /trips/:id/cancel` - Cancel trip
+  - **Request**: `{ reason, cancelledBy }`
+  - **Response**: Cancelled trip with cancellation details
+
+### Authentication
+
+All endpoints require JWT authentication via the `Authorization: Bearer <token>` header.
+
+Service-to-service calls use automatically managed service tokens obtained from MS02-AUTH.
+
+## Service Integrations
+
+### MS02-AUTH - Authentication Service
+- **Purpose**: Service-to-service authentication
+- **Integration**: Automatic JWT token management with renewal
+- **Endpoint**: `POST /admin/login`
+
+### MS06-PRICING - Pricing Service
+- **Purpose**: Dynamic fare calculation
+- **Integration**: Quote generation and price finalization
+- **Endpoints**:
+  - `POST /quote` - Initial price estimate
+  - `POST /finalize` - Final price calculation
+
+### MS10-GEO - Geospatial Service
+- **Purpose**: Location processing and routing
+- **Integration**: H3 encoding, geocoding, route calculation
+- **Endpoints**:
+  - `POST /h3/encode` - Convert coordinates to H3 index
+  - `POST /geocode/forward` - Address to coordinates
+  - `POST /route` - Calculate route between points
+
+### MS03-DRIVER-SESSIONS - Driver Management
+- **Purpose**: Driver availability and location
+- **Integration**: Driver session validation and nearby driver search
+- **Endpoints**:
+  - `GET /sessions/:driverId` - Get driver session details
+  - `GET /sessions/nearby` - Find nearby available drivers
+
+### MS07-PAYMENTS - Payment Processing
+- **Purpose**: Payment intent creation
+- **Integration**: Automated payment processing on trip completion
+- **Endpoint**: `POST /payment-intents` - Create payment intent
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+### AWS ECS Fargate
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+The service is deployed to AWS ECS Fargate using the provided deployment script:
 
 ```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
+# Set network configuration (first deploy only)
+export SUBNET_IDS="subnet-xxxxx,subnet-yyyyy"
+export SECURITY_GROUP_IDS="sg-xxxxx"
+
+# Deploy to production
+./deploy-trips.sh
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+The deployment script handles:
+- Docker image building for linux/amd64
+- ECR repository creation and image push
+- ECS task definition registration
+- Service creation or update
+- Health check monitoring
 
-## Resources
+### Infrastructure Requirements
 
-Check out a few resources that may come in handy when working with NestJS:
+- **VPC**: Existing VPC with public subnets
+- **Security Groups**: Configured for HTTP/HTTPS traffic
+- **IAM Roles**: ECS task execution role with Secrets Manager access
+- **Secrets Manager**: Secrets for DATABASE_URL and REDIS_URL
+- **CloudWatch**: Log group `/ecs/argo-trips`
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## Project Structure
 
-## Support
+```
+argo-trips/
+├── src/
+│   ├── trips/                      # Trips domain module
+│   │   ├── application/            # Use cases
+│   │   │   ├── create-trip/
+│   │   │   ├── accept-trip/
+│   │   │   ├── verify-pin/
+│   │   │   ├── start-trip/
+│   │   │   ├── complete-trip/
+│   │   │   └── cancel-trip/
+│   │   ├── domain/                 # Domain entities
+│   │   │   ├── trip.entity.ts
+│   │   │   └── value-objects/
+│   │   ├── infrastructure/         # External integrations
+│   │   │   ├── http-clients/
+│   │   │   │   ├── pricing.client.ts
+│   │   │   │   ├── geo.client.ts
+│   │   │   │   └── driver-sessions.client.ts
+│   │   │   └── persistence/
+│   │   │       └── trip.repository.ts
+│   │   └── interfaces/             # HTTP layer
+│   │       └── http/
+│   │           └── trips.controller.ts
+│   ├── shared/                     # Shared modules
+│   │   ├── auth/                   # Authentication
+│   │   ├── circuit-breaker/        # Resilience patterns
+│   │   ├── rate-limiter/           # Rate limiting
+│   │   └── http/                   # HTTP utilities
+│   └── main.ts                     # Application entry point
+├── prisma/
+│   ├── schema.prisma               # Database schema
+│   └── migrations/                 # Database migrations
+├── test/                           # E2E tests
+├── deploy-trips.sh                 # AWS deployment script
+├── test-endpoints.sh               # Automated testing script
+├── postman-collection.json         # Postman collection
+├── Dockerfile                      # Multi-stage Docker build
+├── TESTING.md                      # Testing documentation
+├── GATEWAY-FIX.md                  # Gateway configuration notes
+└── README.md                       # This file
+```
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## Contributing
 
-## Stay in touch
+### Development Workflow
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+1. Create a feature branch from `main`
+2. Implement changes following the existing architecture
+3. Write tests for new functionality
+4. Ensure all tests pass: `pnpm run test`
+5. Build the project: `pnpm run build`
+6. Commit with conventional commits format
+7. Push and create a pull request
+
+### Code Style
+
+- Follow TypeScript best practices
+- Use ESLint and Prettier configurations
+- Maintain clean architecture boundaries
+- Document complex business logic
+- Write meaningful commit messages
+
+### Commit Message Format
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+This project is proprietary software developed for the Argo ride-sharing platform.
+
+---
+
+**Version**: 1.0.0
+**Last Updated**: December 2025
+**Maintained By**: Argo Platform Team
