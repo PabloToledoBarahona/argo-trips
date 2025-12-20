@@ -286,11 +286,12 @@ export class GeoClient implements OnModuleInit {
 
       // Execute with circuit breaker protection
       const response = await this.etaCircuitBreaker.execute(async () => {
+        const headers = await this.serviceTokenService.getServiceHeaders();
         return await this.httpService.post<EtaResponse>(
           `${this.baseUrl}/eta`,
           request,
           {
-            headers: this.serviceTokenService.getServiceHeaders(),
+            headers,
             timeout: this.ETA_TIMEOUT_MS,
           },
         );
@@ -357,11 +358,12 @@ export class GeoClient implements OnModuleInit {
 
       // Execute with circuit breaker protection
       const response = await this.routeCircuitBreaker.execute(async () => {
+        const headers = await this.serviceTokenService.getServiceHeaders();
         return await this.httpService.post<RouteResponse>(
           `${this.baseUrl}/route`,
           request,
           {
-            headers: this.serviceTokenService.getServiceHeaders(),
+            headers,
             timeout: this.ROUTE_TIMEOUT_MS,
           },
         );
@@ -464,11 +466,12 @@ export class GeoClient implements OnModuleInit {
 
       // Execute remaining operations with circuit breaker
       const response = await this.h3CircuitBreaker.execute(async () => {
+        const headers = await this.serviceTokenService.getServiceHeaders();
         return await this.httpService.post<H3Response>(
           `${this.baseUrl}/h3/encode`,
           { ops: uncachedOps },
           {
-            headers: this.serviceTokenService.getServiceHeaders(),
+            headers,
             timeout: this.H3_TIMEOUT_MS,
           },
         );
@@ -579,11 +582,12 @@ export class GeoClient implements OnModuleInit {
 
       this.validateGeocodeForwardRequest(request);
 
+      const headers = await this.serviceTokenService.getServiceHeaders();
       const response = await this.httpService.post<GeocodeForwardResponse>(
         `${this.baseUrl}/geocode`,
         request,
         {
-          headers: this.serviceTokenService.getServiceHeaders(),
+          headers,
           timeout: this.GEOCODE_TIMEOUT_MS,
         },
       );
@@ -641,11 +645,12 @@ export class GeoClient implements OnModuleInit {
 
       this.validateGeocodeReverseRequest(request);
 
+      const headers = await this.serviceTokenService.getServiceHeaders();
       const response = await this.httpService.post<GeocodeReverseResponse>(
         `${this.baseUrl}/geocode/reverse`,
         request,
         {
-          headers: this.serviceTokenService.getServiceHeaders(),
+          headers,
           timeout: this.GEOCODE_TIMEOUT_MS,
         },
       );

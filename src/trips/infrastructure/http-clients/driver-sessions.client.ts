@@ -166,10 +166,11 @@ export class DriverSessionsClient implements OnModuleInit {
 
       // Execute with circuit breaker protection
       const response = await this.sessionCircuitBreaker.execute(async () => {
+        const headers = await this.serviceTokenService.getServiceHeaders();
         return await this.httpService.get<DriverSessionResponse>(
           `${this.baseUrl}/sessions/${driverId}`,
           {
-            headers: this.serviceTokenService.getServiceHeaders(),
+            headers,
             timeout: this.SESSION_TIMEOUT_MS,
           },
         );
@@ -234,10 +235,11 @@ export class DriverSessionsClient implements OnModuleInit {
 
       // Execute with circuit breaker protection
       const response = await this.nearbyCircuitBreaker.execute(async () => {
+        const headers = await this.serviceTokenService.getServiceHeaders();
         return await this.httpService.get<NearbyDriversResponse>(
           `${this.baseUrl}/sessions/nearby?${params.toString()}`,
           {
-            headers: this.serviceTokenService.getServiceHeaders(),
+            headers,
             timeout: this.NEARBY_TIMEOUT_MS,
           },
         );

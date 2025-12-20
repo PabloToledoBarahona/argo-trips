@@ -256,16 +256,21 @@ export class PricingClient implements OnModuleInit {
     await this.rateLimiter.acquire('pricing-quote');
 
     // Execute with circuit breaker
-    const response = await this.quoteCircuitBreaker.execute(async () => {
-      return await this.httpService.post<QuoteResponse>(
+    const wrappedResponse = await this.quoteCircuitBreaker.execute(async () => {
+      const headers = await this.serviceTokenService.getServiceHeaders();
+      return await this.httpService.post<any>(
         `${this.baseUrl}/quote`,
         request,
         {
-          headers: this.serviceTokenService.getServiceHeaders(),
+          headers,
           timeout: this.QUOTE_TIMEOUT_MS,
         },
       );
     });
+
+    // Unwrap the success envelope from MS06-Pricing
+    // Response format: { success: true, data: { quote_id, ... } }
+    const response: QuoteResponse = wrappedResponse.data || wrappedResponse;
 
     this.validateQuoteResponse(response);
 
@@ -318,16 +323,21 @@ export class PricingClient implements OnModuleInit {
     await this.rateLimiter.acquire('pricing-finalize');
 
     // Execute with circuit breaker
-    const response = await this.finalizeCircuitBreaker.execute(async () => {
-      return await this.httpService.post<FinalizeResponse>(
+    const wrappedResponse = await this.finalizeCircuitBreaker.execute(async () => {
+      const headers = await this.serviceTokenService.getServiceHeaders();
+      return await this.httpService.post<any>(
         `${this.baseUrl}/finalize`,
         request,
         {
-          headers: this.serviceTokenService.getServiceHeaders(),
+          headers,
           timeout: this.FINALIZE_TIMEOUT_MS,
         },
       );
     });
+
+    // Unwrap the success envelope from MS06-Pricing
+    // Response format: { success: true, data: { trip_id, ... } }
+    const response: FinalizeResponse = wrappedResponse.data || wrappedResponse;
 
     this.validateFinalizeResponse(response);
 
