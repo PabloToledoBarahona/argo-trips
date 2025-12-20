@@ -16,10 +16,26 @@ let JwtPayloadMiddleware = class JwtPayloadMiddleware {
         }
         try {
             const decoded = Buffer.from(jwtPayload, 'base64').toString('utf-8');
-            const user = JSON.parse(decoded);
-            if (!user.sub || !user.identityType) {
+            const payload = JSON.parse(decoded);
+            if (!payload.sub || !payload.roles || !Array.isArray(payload.roles)) {
                 throw new common_1.UnauthorizedException('Invalid JWT payload structure');
             }
+            let identityType = 'rider';
+            if (payload.roles.includes('admin')) {
+                identityType = 'admin';
+            }
+            else if (payload.roles.includes('driver')) {
+                identityType = 'driver';
+            }
+            else if (payload.roles.includes('rider')) {
+                identityType = 'rider';
+            }
+            const user = {
+                sub: payload.sub,
+                roles: payload.roles,
+                identityType: payload.identityType || identityType,
+                deviceId: payload.did || payload.deviceId,
+            };
             req.user = user;
             next();
         }

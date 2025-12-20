@@ -61,8 +61,9 @@ let DriverSessionsClient = DriverSessionsClient_1 = class DriverSessionsClient {
             this.validateDriverId(driverId);
             await this.rateLimiter.acquire('driver-sessions-get');
             const response = await this.sessionCircuitBreaker.execute(async () => {
+                const headers = await this.serviceTokenService.getServiceHeaders();
                 return await this.httpService.get(`${this.baseUrl}/sessions/${driverId}`, {
-                    headers: this.serviceTokenService.getServiceHeaders(),
+                    headers,
                     timeout: this.SESSION_TIMEOUT_MS,
                 });
             });
@@ -87,8 +88,9 @@ let DriverSessionsClient = DriverSessionsClient_1 = class DriverSessionsClient {
                 ...(request.limit !== undefined && { limit: request.limit.toString() }),
             });
             const response = await this.nearbyCircuitBreaker.execute(async () => {
+                const headers = await this.serviceTokenService.getServiceHeaders();
                 return await this.httpService.get(`${this.baseUrl}/sessions/nearby?${params.toString()}`, {
-                    headers: this.serviceTokenService.getServiceHeaders(),
+                    headers,
                     timeout: this.NEARBY_TIMEOUT_MS,
                 });
             });

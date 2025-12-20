@@ -59,12 +59,14 @@ let PricingClient = PricingClient_1 = class PricingClient {
         this.logger.debug(`Requesting quote for city: ${request.city}, vehicle: ${request.vehicle_type}`);
         this.validateQuoteRequest(request);
         await this.rateLimiter.acquire('pricing-quote');
-        const response = await this.quoteCircuitBreaker.execute(async () => {
+        const wrappedResponse = await this.quoteCircuitBreaker.execute(async () => {
+            const headers = await this.serviceTokenService.getServiceHeaders();
             return await this.httpService.post(`${this.baseUrl}/quote`, request, {
-                headers: this.serviceTokenService.getServiceHeaders(),
+                headers,
                 timeout: this.QUOTE_TIMEOUT_MS,
             });
         });
+        const response = wrappedResponse.data || wrappedResponse;
         this.validateQuoteResponse(response);
         if (response.degradation) {
             this.logger.warn(`Quote ${response.quote_id} returned with degradation mode: ${response.degradation}. Estimate may be less accurate.`);
@@ -76,12 +78,14 @@ let PricingClient = PricingClient_1 = class PricingClient {
         this.logger.debug(`Finalizing pricing for trip: ${request.trip_id}, quote: ${request.quote_id}, status: ${request.status}`);
         this.validateFinalizeRequest(request);
         await this.rateLimiter.acquire('pricing-finalize');
-        const response = await this.finalizeCircuitBreaker.execute(async () => {
+        const wrappedResponse = await this.finalizeCircuitBreaker.execute(async () => {
+            const headers = await this.serviceTokenService.getServiceHeaders();
             return await this.httpService.post(`${this.baseUrl}/finalize`, request, {
-                headers: this.serviceTokenService.getServiceHeaders(),
+                headers,
                 timeout: this.FINALIZE_TIMEOUT_MS,
             });
         });
+        const response = wrappedResponse.data || wrappedResponse;
         this.validateFinalizeResponse(response);
         if (response.degradation) {
             this.logger.warn(`Finalize for trip ${response.trip_id} returned with degradation mode: ${response.degradation}`);

@@ -82,8 +82,9 @@ let GeoClient = GeoClient_1 = class GeoClient {
             this.validateEtaRequest(request);
             await this.rateLimiter.acquire('geo-eta');
             const response = await this.etaCircuitBreaker.execute(async () => {
+                const headers = await this.serviceTokenService.getServiceHeaders();
                 return await this.httpService.post(`${this.baseUrl}/eta`, request, {
-                    headers: this.serviceTokenService.getServiceHeaders(),
+                    headers,
                     timeout: this.ETA_TIMEOUT_MS,
                 });
             });
@@ -106,8 +107,9 @@ let GeoClient = GeoClient_1 = class GeoClient {
             this.validateRouteRequest(request);
             await this.rateLimiter.acquire('geo-route');
             const response = await this.routeCircuitBreaker.execute(async () => {
+                const headers = await this.serviceTokenService.getServiceHeaders();
                 return await this.httpService.post(`${this.baseUrl}/route`, request, {
-                    headers: this.serviceTokenService.getServiceHeaders(),
+                    headers,
                     timeout: this.ROUTE_TIMEOUT_MS,
                 });
             });
@@ -159,8 +161,9 @@ let GeoClient = GeoClient_1 = class GeoClient {
             }
             await this.rateLimiter.acquire('geo-h3');
             const response = await this.h3CircuitBreaker.execute(async () => {
+                const headers = await this.serviceTokenService.getServiceHeaders();
                 return await this.httpService.post(`${this.baseUrl}/h3/encode`, { ops: uncachedOps }, {
-                    headers: this.serviceTokenService.getServiceHeaders(),
+                    headers,
                     timeout: this.H3_TIMEOUT_MS,
                 });
             });
@@ -205,8 +208,9 @@ let GeoClient = GeoClient_1 = class GeoClient {
         try {
             this.logger.debug(`Geocoding forward: query="${request.query}", city=${request.city}, country=${request.country}`);
             this.validateGeocodeForwardRequest(request);
+            const headers = await this.serviceTokenService.getServiceHeaders();
             const response = await this.httpService.post(`${this.baseUrl}/geocode`, request, {
-                headers: this.serviceTokenService.getServiceHeaders(),
+                headers,
                 timeout: this.GEOCODE_TIMEOUT_MS,
             });
             this.validateGeocodeForwardResponse(response);
@@ -226,8 +230,9 @@ let GeoClient = GeoClient_1 = class GeoClient {
         try {
             this.logger.debug(`Geocoding reverse: (${request.lat},${request.lng}), lang=${request.lang || 'es'}`);
             this.validateGeocodeReverseRequest(request);
+            const headers = await this.serviceTokenService.getServiceHeaders();
             const response = await this.httpService.post(`${this.baseUrl}/geocode/reverse`, request, {
-                headers: this.serviceTokenService.getServiceHeaders(),
+                headers,
                 timeout: this.GEOCODE_TIMEOUT_MS,
             });
             this.validateGeocodeReverseResponse(response);
