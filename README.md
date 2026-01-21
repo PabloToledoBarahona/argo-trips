@@ -352,33 +352,136 @@ Service-to-service calls use automatically managed service tokens obtained from 
 
 ## Deployment
 
-### AWS ECS Fargate
+### AWS ECS Fargate - Optimized Architecture
 
-The service is deployed to AWS ECS Fargate using the provided deployment script:
+The service is deployed to AWS ECS Fargate following the cost-optimized architecture guidelines (January 2026):
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    AWS Account: 522195962216                     │
+│                       Region: us-east-2                          │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   Internet ──► ALB (Shared) ──► /trips/* ──► Target Group       │
+│                    │                              │              │
+│                    └── Path-based routing         ▼              │
+│                                           ┌─────────────┐        │
+│   Cloud Map (argo.local)                  │ ECS Fargate │        │
+│        │                                  │ argo-trips  │        │
+│        └── argo-trips.argo.local ────────►│   :3000     │        │
+│                                           └─────────────┘        │
+│                                                  │               │
+│                                    Single-AZ: us-east-2a         │
+│                                    Subnet: subnet-09d829aab...   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Key Architecture Decisions
+
+| Decision | Rationale |
+|----------|-----------|
+| **1 ALB Shared** | Cost reduction: $129/mo → $21/mo (saves $108/mo) |
+| **Single-AZ (dev)** | Cost reduction: $64/mo → $7/mo (saves $57/mo) |
+| **Cloud Map** | Service discovery for internal communication |
+| **desiredCount=0** | Cost control: only run when actively developing |
+| **7-day log retention** | Prevent unbounded CloudWatch costs |
+
+### Deployment Script
 
 ```bash
-# Set network configuration (first deploy only)
-export SUBNET_IDS="subnet-xxxxx,subnet-yyyyy"
-export SECURITY_GROUP_IDS="sg-xxxxx"
-
-# Deploy to production
+# Deploy to AWS ECS Fargate
 ./deploy-trips.sh
 ```
 
 The deployment script handles:
-- Docker image building for linux/amd64
-- ECR repository creation and image push
-- ECS task definition registration
-- Service creation or update
-- Health check monitoring
+- Docker image building for linux/amd64 (buildx)
+- ECR repository creation with security scanning
+- CloudWatch log group with 7-day retention (mandatory)
+- Cloud Map service registration (`argo-trips.argo.local`)
+- ECS task definition with secrets injection
+- Service creation with desiredCount=0 (cost control)
+- Automatic deployment updates for existing services
+
+### Service Lifecycle Commands
+
+```bash
+# Start service (when actively developing)
+aws ecs update-service \
+  --cluster argo-cluster \
+  --service argo-trips-service \
+  --desired-count 1 \
+  --region us-east-2
+
+# Stop service (when done - IMPORTANT for cost control)
+aws ecs update-service \
+  --cluster argo-cluster \
+  --service argo-trips-service \
+  --desired-count 0 \
+  --region us-east-2
+
+# Check service status
+aws ecs describe-services \
+  --cluster argo-cluster \
+  --services argo-trips-service \
+  --region us-east-2 \
+  --query 'services[0].{Status:status,Running:runningCount,Desired:desiredCount}'
+```
 
 ### Infrastructure Requirements
 
-- **VPC**: Existing VPC with public subnets
-- **Security Groups**: Configured for HTTP/HTTPS traffic
-- **IAM Roles**: ECS task execution role with Secrets Manager access
-- **Secrets Manager**: Secrets for DATABASE_URL and REDIS_URL
-- **CloudWatch**: Log group `/ecs/argo-trips`
+| Resource | Value | Notes |
+|----------|-------|-------|
+| **AWS Account** | `522195962216` | New optimized account |
+| **Region** | `us-east-2` | Ohio |
+| **ECS Cluster** | `argo-cluster` | Shared cluster |
+| **Subnet (dev)** | `subnet-09d829aab7d6307a6` | Single-AZ: us-east-2a |
+| **Security Group** | `sg-0be38c7c217448d01` | ECS tasks SG |
+| **Cloud Map** | `argo.local` | Service discovery namespace |
+| **ALB** | `argo-shared-alb-828452645...` | Shared ALB with path routing |
+
+### Required Secrets (AWS Secrets Manager)
+
+Before first deployment, create these secrets:
+
+```bash
+# Database connection
+aws secretsmanager create-secret \
+  --name /argo/trips/database-url \
+  --secret-string "postgresql://user:pass@host:5432/db" \
+  --region us-east-2
+
+# Redis internal cache
+aws secretsmanager create-secret \
+  --name /argo/trips/redis-url \
+  --secret-string "rediss://default:token@host:6379" \
+  --region us-east-2
+
+# Redis Event Bus (shared)
+aws secretsmanager create-secret \
+  --name /argo/trips/redis-event-bus-url \
+  --secret-string "rediss://default:token@eventbus-host:6379" \
+  --region us-east-2
+```
+
+### Gateway Configuration
+
+Request the DevOps team to configure the shared ALB:
+
+- **Path Pattern**: `/trips/*`
+- **Target Group**: `argo-trips-tg`
+- **Health Check Path**: `/health`
+- **Port**: 3000
+- **Priority**: 60 (after other services)
+
+### Cost Estimation (Development)
+
+| Component | Always-On | With Scheduler |
+|-----------|-----------|----------------|
+| ECS Fargate (512 CPU, 1GB) | $18/mo | $7/mo (40% uptime) |
+| ALB (shared, 1/7 cost) | $3/mo | $3/mo |
+| CloudWatch Logs | $1/mo | $1/mo |
+| Secrets Manager (3 secrets) | $1.20/mo | $1.20/mo |
+| **Total** | **$23/mo** | **$12/mo** |
 
 ## Project Structure
 
@@ -467,6 +570,6 @@ This project is proprietary software developed for the Argo ride-sharing platfor
 
 ---
 
-**Version**: 1.2.0
+**Version**: 1.3.0
 **Last Updated**: January 2026
 **Maintained By**: Argo Platform Team
