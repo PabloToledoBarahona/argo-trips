@@ -7,6 +7,7 @@ import { TripAuditPrismaRepository } from '../../infrastructure/persistence/pris
 import { PricingClient, FinalizeResponse } from '../../infrastructure/http-clients/pricing.client.js';
 import { PaymentsClient } from '../../infrastructure/http-clients/payments.client.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
+import { PaymentMethod } from '../../domain/enums/payment-method.enum.js';
 import { Trip } from '../../domain/entities/trip.entity.js';
 
 describe('CompleteTripUseCase', () => {
@@ -40,6 +41,7 @@ describe('CompleteTripUseCase', () => {
     riderId: 'rider-123',
     driverId: 'driver-456',
     vehicleType: 'economy',
+    paymentMethod: PaymentMethod.CASH,
     status: TripStatus.IN_PROGRESS,
     city: 'New York',
     originLat: 40.7128,
@@ -184,12 +186,12 @@ describe('CompleteTripUseCase', () => {
         status: 'completed',
       });
 
-      // Verify PaymentsClient was called with total_final
+      // Verify PaymentsClient was called with total_final and payment method from trip
       expect(paymentsClient.createIntent).toHaveBeenCalledWith({
         tripId: mockTrip.id,
         amount: mockFinalizeResponse.total_final,
         currency: mockFinalizeResponse.currency,
-        method: 'card',
+        method: PaymentMethod.CASH,
       });
 
       // Verify audit log includes correct pricing fields

@@ -1,4 +1,5 @@
-import { IsString, IsNumber, IsNotEmpty, Min, Max, IsEnum } from 'class-validator';
+import { IsString, IsNumber, IsNotEmpty, Min, Max, IsEnum, IsOptional } from 'class-validator';
+import { Transform, Expose } from 'class-transformer';
 import { PaymentMethod } from '../../domain/enums/payment-method.enum.js';
 
 export class CreateTripDto {
@@ -14,11 +15,25 @@ export class CreateTripDto {
   @IsNotEmpty()
   city: string;
 
+  /**
+   * Payment method for the trip.
+   * Accepts both camelCase (paymentMethod) and snake_case (payment_method).
+   * Valid values: 'cash', 'qr'
+   */
+  @Transform(({ obj }) => obj.paymentMethod ?? obj.payment_method)
   @IsEnum(PaymentMethod, {
     message: `paymentMethod must be one of: ${Object.values(PaymentMethod).join(', ')}`,
   })
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'paymentMethod is required' })
   paymentMethod: PaymentMethod;
+
+  /**
+   * Alias for paymentMethod (snake_case support).
+   * This field is transformed into paymentMethod.
+   */
+  @IsOptional()
+  @Expose({ name: 'payment_method' })
+  payment_method?: PaymentMethod;
 
   @IsNumber()
   @Min(-90)

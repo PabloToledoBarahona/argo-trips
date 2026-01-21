@@ -7,6 +7,7 @@ import { TripAuditPrismaRepository } from '../../infrastructure/persistence/pris
 import { GeoClient } from '../../infrastructure/http-clients/geo.client.js';
 import { PricingClient, QuoteResponse } from '../../infrastructure/http-clients/pricing.client.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
+import { PaymentMethod } from '../../domain/enums/payment-method.enum.js';
 import { Trip } from '../../domain/entities/trip.entity.js';
 
 // Mock uuid module
@@ -113,6 +114,7 @@ describe('CreateTripUseCase', () => {
         riderId: 'rider-123',
         vehicleType: 'economy',
         city: 'New York',
+        paymentMethod: PaymentMethod.CASH,
         originLat: 40.7128,
         originLng: -74.006,
         originH3Res9: 'h3-origin-res9',
@@ -151,6 +153,7 @@ describe('CreateTripUseCase', () => {
         id: 'trip-123',
         riderId: dto.riderId,
         vehicleType: 'economy',
+        paymentMethod: PaymentMethod.CASH,
         status: TripStatus.REQUESTED,
         city: dto.city,
         originLat: dto.originLat,
@@ -226,6 +229,7 @@ describe('CreateTripUseCase', () => {
         riderId: 'rider-123',
         vehicleType: 'economy',
         city: 'New York',
+        paymentMethod: PaymentMethod.CASH,
         originLat: 40.7128,
         originLng: -74.006,
         originH3Res9: 'h3-origin-res9-fallback',
@@ -250,6 +254,7 @@ describe('CreateTripUseCase', () => {
         id: 'trip-123',
         riderId: dto.riderId,
         vehicleType: 'economy',
+        paymentMethod: PaymentMethod.CASH,
         status: TripStatus.REQUESTED,
         city: dto.city,
         originLat: dto.originLat,
@@ -303,6 +308,7 @@ describe('CreateTripUseCase', () => {
         riderId: 'rider-123',
         vehicleType: 'economy',
         city: 'New York',
+        paymentMethod: PaymentMethod.CASH,
         originLat: 40.7128,
         originLng: -74.006,
         originH3Res9: 'h3-origin-res9',
@@ -328,6 +334,7 @@ describe('CreateTripUseCase', () => {
         riderId: 'rider-123',
         vehicleType: 'economy',
         city: 'New York',
+        paymentMethod: PaymentMethod.CASH,
         originLat: 40.7128,
         originLng: -74.006,
         originH3Res9: 'h3-origin-res9',
