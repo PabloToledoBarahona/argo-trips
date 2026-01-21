@@ -51,8 +51,8 @@ RUN pnpm run build
 # =============================================================================
 FROM node:20-alpine AS production
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+# Install dumb-init for proper signal handling and curl for health checks
+RUN apk add --no-cache dumb-init curl
 
 WORKDIR /app
 
