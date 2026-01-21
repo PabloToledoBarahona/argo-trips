@@ -38,6 +38,9 @@ import { PaymentsEventsHandler } from './interfaces/events/payments.events.handl
 import { DriverSessionsEventsHandler } from './interfaces/events/driver-sessions.events.handler.js';
 import { TripsJobsProcessor } from './interfaces/jobs/trips.jobs.processor.js';
 
+// Event Bus Handler
+import { TripEventsHandler } from '../shared/event-bus/trip-events.handler.js';
+
 @Module({
   imports: [SharedModule],
   controllers: [TripsController],
@@ -77,6 +80,9 @@ import { TripsJobsProcessor } from './interfaces/jobs/trips.jobs.processor.js';
     PaymentsEventsHandler,
     DriverSessionsEventsHandler,
     TripsJobsProcessor,
+
+    // Event Bus Handler
+    TripEventsHandler,
   ],
   exports: [],
 })

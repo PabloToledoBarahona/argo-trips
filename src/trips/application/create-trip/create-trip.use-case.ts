@@ -5,6 +5,7 @@ import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/tr
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
 import { GeoClient } from '../../infrastructure/http-clients/geo.client.js';
 import { PricingClient, QuoteRequest, QuoteResponse } from '../../infrastructure/http-clients/pricing.client.js';
+import { EventBusService } from '../../../shared/event-bus/event-bus.service.js';
 import { PricingSnapshot, Trip } from '../../domain/entities/trip.entity.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
 import { mapToPricingVehicleType } from '../shared/vehicle-type.mapper.js';
@@ -19,6 +20,7 @@ export class CreateTripUseCase {
     private readonly auditRepository: TripAuditPrismaRepository,
     private readonly geoClient: GeoClient,
     private readonly pricingClient: PricingClient,
+    private readonly eventBus: EventBusService,
   ) {}
 
   async execute(dto: CreateTripDto): Promise<CreateTripResponseDto> {
@@ -26,6 +28,12 @@ export class CreateTripUseCase {
 
     // Generate unique trip ID
     const tripId = uuidv4();
+    const paymentMethod =
+      dto.paymentMethod ?? dto.payment_method ?? dto.payment_channel;
+
+    if (!paymentMethod) {
+      throw new BadRequestException('paymentMethod is required');
+    }
 
     const originCoordinates = { lat: dto.originLat, lng: dto.originLng };
     const destinationCoordinates = { lat: dto.destLat, lng: dto.destLng };
@@ -143,7 +151,7 @@ export class CreateTripUseCase {
       id: tripId,
       riderId: dto.riderId,
       vehicleType: pricingVehicleType,
-      paymentMethod: dto.paymentMethod,
+      paymentMethod,
       status: TripStatus.REQUESTED,
       city: dto.city,
       originLat: dto.originLat,
@@ -180,6 +188,31 @@ export class CreateTripUseCase {
     this.logger.log(
       `Trip created: ${tripId}, quote: ${quoteResponse.quote_id}, est total: ${quoteResponse.estimate_total} ${quoteResponse.currency}, surge=${quoteResponse.zone.surge}, degradation=${quoteResponse.degradation ?? 'none'}`,
     );
+
+    // Publish trip.created event to Event Bus
+    await this.eventBus.publishTripEvent({
+      type: 'trip.created',
+      data: {
+        tripId: savedTrip.id,
+        riderId: savedTrip.riderId,
+        vehicleType: savedTrip.vehicleType,
+        paymentMethod: savedTrip.paymentMethod,
+        city: savedTrip.city,
+        origin: {
+          lat: savedTrip.originLat,
+          lng: savedTrip.originLng,
+          h3Res9: savedTrip.originH3Res9,
+        },
+        destination: {
+          lat: savedTrip.destLat,
+          lng: savedTrip.destLng,
+          h3Res9: savedTrip.destH3Res9,
+        },
+        estimateTotal: quoteResponse.estimate_total,
+        currency: quoteResponse.currency,
+        quoteId: quoteResponse.quote_id,
+      },
+    });
 
     return {
       id: savedTrip.id,

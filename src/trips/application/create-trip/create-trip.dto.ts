@@ -1,6 +1,57 @@
-import { IsString, IsNumber, IsNotEmpty, Min, Max, IsEnum, IsOptional } from 'class-validator';
-import { Transform, Expose } from 'class-transformer';
+import {
+  IsString,
+  IsNumber,
+  IsNotEmpty,
+  Min,
+  Max,
+  IsOptional,
+  registerDecorator,
+  ValidationArguments,
+  ValidationOptions,
+} from 'class-validator';
+import { Expose } from 'class-transformer';
 import { PaymentMethod } from '../../domain/enums/payment-method.enum.js';
+
+const PAYMENT_METHOD_VALUES = Object.values(PaymentMethod);
+
+function isValidPaymentMethod(value: unknown): value is PaymentMethod {
+  return PAYMENT_METHOD_VALUES.includes(value as PaymentMethod);
+}
+
+function IsPaymentMethodInputValid(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'isPaymentMethodInputValid',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: {
+        validate(_: unknown, args: ValidationArguments) {
+          const obj = args.object as {
+            paymentMethod?: unknown;
+            payment_method?: unknown;
+            payment_channel?: unknown;
+          };
+          const values = [
+            obj.paymentMethod,
+            obj.payment_method,
+            obj.payment_channel,
+          ].filter((value) => value !== undefined);
+
+          if (values.length === 0) {
+            return false;
+          }
+
+          if (!values.every((value) => isValidPaymentMethod(value))) {
+            return false;
+          }
+
+          return values.every((value) => value === values[0]);
+        },
+      },
+    });
+  };
+}
 
 export class CreateTripDto {
   @IsString()
@@ -17,23 +68,27 @@ export class CreateTripDto {
 
   /**
    * Payment method for the trip.
-   * Accepts both camelCase (paymentMethod) and snake_case (payment_method).
+   * Accepts camelCase (paymentMethod) and snake_case (payment_method, payment_channel).
    * Valid values: 'cash', 'qr'
    */
-  @Transform(({ obj }) => obj.paymentMethod ?? obj.payment_method)
-  @IsEnum(PaymentMethod, {
-    message: `paymentMethod must be one of: ${Object.values(PaymentMethod).join(', ')}`,
+  @IsPaymentMethodInputValid({
+    message: `paymentMethod is required and must be one of: ${PAYMENT_METHOD_VALUES.join(', ')}`,
   })
-  @IsNotEmpty({ message: 'paymentMethod is required' })
-  paymentMethod: PaymentMethod;
+  paymentMethod?: PaymentMethod;
 
   /**
    * Alias for paymentMethod (snake_case support).
-   * This field is transformed into paymentMethod.
    */
   @IsOptional()
   @Expose({ name: 'payment_method' })
   payment_method?: PaymentMethod;
+
+  /**
+   * Alias for paymentMethod (snake_case support).
+   */
+  @IsOptional()
+  @Expose({ name: 'payment_channel' })
+  payment_channel?: PaymentMethod;
 
   @IsNumber()
   @Min(-90)

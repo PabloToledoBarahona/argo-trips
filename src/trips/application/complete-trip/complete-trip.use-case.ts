@@ -4,6 +4,7 @@ import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/tr
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
 import { PricingClient, FinalizeRequest, FinalizeResponse } from '../../infrastructure/http-clients/pricing.client.js';
 import { PaymentsClient } from '../../infrastructure/http-clients/payments.client.js';
+import { EventBusService } from '../../../shared/event-bus/event-bus.service.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
 import { PricingSnapshot } from '../../domain/entities/trip.entity.js';
 import { mapToPricingVehicleType } from '../shared/vehicle-type.mapper.js';
@@ -17,6 +18,7 @@ export class CompleteTripUseCase {
     private readonly auditRepository: TripAuditPrismaRepository,
     private readonly pricingClient: PricingClient,
     private readonly paymentsClient: PaymentsClient,
+    private readonly eventBus: EventBusService,
   ) {}
 
   async execute(dto: CompleteTripDto): Promise<CompleteTripResponseDto> {
@@ -128,6 +130,22 @@ export class CompleteTripUseCase {
     this.logger.log(
       `Trip ${dto.tripId} completed (quote ${trip.quoteId}), final price: ${finalPricing.total_final} ${finalPricing.currency}, surge=${finalPricing.surge_used}, min_fare_applied=${finalPricing.min_fare_applied}, payment intent: ${paymentIntent.paymentIntentId}, degradation=${finalPricing.degradation ?? 'none'}`,
     );
+
+    // Publish trip.completed event to Event Bus
+    await this.eventBus.publishTripEvent({
+      type: 'trip.completed',
+      data: {
+        tripId: updatedTrip.id,
+        riderId: updatedTrip.riderId,
+        driverId: updatedTrip.driverId!,
+        paymentMethod: updatedTrip.paymentMethod,
+        totalPrice: finalPricing.total_final,
+        currency: finalPricing.currency,
+        distanceMeters: distance_m_final,
+        durationSeconds: duration_s_final,
+        paymentIntentId: paymentIntent.paymentIntentId,
+      },
+    });
 
     return {
       id: updatedTrip.id,

@@ -7,6 +7,7 @@
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Features](#features)
+- [Event Bus](#event-bus)
 - [Technology Stack](#technology-stack)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -79,6 +80,56 @@ src/
 - **Structured Logging**: JSON-formatted logs with request correlation
 - **Graceful Degradation**: Fallback mechanisms for partial service availability
 - **Idempotency**: Safe retry mechanisms for critical operations
+- **Event-Driven Communication**: Redis Streams for inter-service messaging
+
+## Event Bus
+
+The service implements an Event Bus architecture using **Redis Streams** for asynchronous inter-microservice communication. This enables loose coupling between services and reliable event delivery.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Shared Redis Event Bus                        │
+│                 (Redis Streams - Upstash)                        │
+├─────────────────────────────────────────────────────────────────┤
+│  stream:trips    │  stream:payments  │  stream:drivers          │
+└────────┬─────────┴────────┬──────────┴────────┬─────────────────┘
+         │                  │                   │
+    ┌────▼────┐        ┌────▼────┐         ┌────▼────┐
+    │ MS04    │        │ MS07    │         │ MS03    │
+    │ Trips   │        │Payments │         │ Driver  │
+    │         │        │         │         │Sessions │
+    └─────────┘        └─────────┘         └─────────┘
+```
+
+Each microservice has:
+- **Internal Redis**: For cache, sessions, and state management
+- **Shared Event Bus**: For publishing and consuming events across services
+
+### Events Published (by MS04-Trips)
+
+| Event Type | Stream | Payload | Trigger |
+|------------|--------|---------|---------|
+| `trip.created` | `stream:trips` | tripId, riderId, vehicleType, paymentMethod, origin, destination, pricing | Trip creation |
+| `trip.assigned` | `stream:trips` | tripId, riderId, driverId, estimatedArrival | Driver accepts trip |
+| `trip.completed` | `stream:trips` | tripId, riderId, driverId, totalPrice, currency, paymentIntentId | Trip completion |
+| `trip.cancelled` | `stream:trips` | tripId, riderId, driverId, cancelledBy, reason, cancellationFee | Trip cancellation |
+
+### Events Consumed (by MS04-Trips)
+
+| Event Type | Stream | Action |
+|------------|--------|--------|
+| `payment.captured` | `stream:payments` | Updates trip status to PAID |
+| `payment.failed` | `stream:payments` | Logs payment failure for trip |
+| `driver.offline` | `stream:drivers` | Cancels trip if driver goes offline |
+
+### Consumer Groups
+
+Events are consumed using Redis Streams consumer groups, ensuring:
+- **Reliable delivery**: Messages are acknowledged after processing
+- **Fault tolerance**: Unacknowledged messages are re-delivered
+- **Scalability**: Multiple instances can share the workload
 
 ## Technology Stack
 
@@ -128,8 +179,11 @@ Create a `.env` file in the project root with the following configuration:
 # Database
 DATABASE_URL="postgresql://user:password@host:5432/argo-trips?sslmode=require"
 
-# Redis Cache
-REDIS_URL="rediss://default:password@host:6379"
+# Redis Internal (cache, sessions, state)
+REDIS_URL="rediss://default:password@internal-redis-host:6379"
+
+# Redis Event Bus (shared across microservices)
+REDIS_EVENT_BUS_URL="rediss://default:password@shared-eventbus-host:6379"
 
 # Service URLs
 PRICING_SERVICE_URL="http://gateway-url/pricing"
@@ -153,7 +207,8 @@ NODE_ENV=production
 For production deployment, the following secrets should be stored in AWS Secrets Manager:
 
 - `/argo/trips/database-url`: PostgreSQL connection string
-- `/argo/trips/redis-url`: Redis connection string
+- `/argo/trips/redis-url`: Redis internal cache connection string
+- `/argo/trips/redis-event-bus-url`: Redis Event Bus connection string (shared)
 
 ## Running the Application
 
@@ -354,6 +409,10 @@ argo-trips/
 │   ├── shared/                     # Shared modules
 │   │   ├── auth/                   # Authentication
 │   │   ├── circuit-breaker/        # Resilience patterns
+│   │   ├── event-bus/              # Redis Streams Event Bus
+│   │   │   ├── event-bus.service.ts
+│   │   │   ├── events.interface.ts
+│   │   │   └── trip-events.handler.ts
 │   │   ├── rate-limiter/           # Rate limiting
 │   │   └── http/                   # HTTP utilities
 │   └── main.ts                     # Application entry point
@@ -408,6 +467,6 @@ This project is proprietary software developed for the Argo ride-sharing platfor
 
 ---
 
-**Version**: 1.1.0
+**Version**: 1.2.0
 **Last Updated**: January 2026
 **Maintained By**: Argo Platform Team

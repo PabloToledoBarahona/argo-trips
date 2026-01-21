@@ -6,6 +6,7 @@ import { DriverSessionsClient } from '../../infrastructure/http-clients/driver-s
 import { GeoClient } from '../../infrastructure/http-clients/geo.client.js';
 import { PinCacheService } from '../../infrastructure/redis/pin-cache.service.js';
 import { TimerService } from '../../infrastructure/redis/timer.service.js';
+import { EventBusService } from '../../../shared/event-bus/event-bus.service.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
 import { mapToGeoProfile } from '../shared/geo-profile.mapper.js';
 
@@ -22,6 +23,7 @@ export class AcceptTripUseCase {
     private readonly geoClient: GeoClient,
     private readonly pinCacheService: PinCacheService,
     private readonly timerService: TimerService,
+    private readonly eventBus: EventBusService,
   ) {}
 
   async execute(dto: AcceptTripDto): Promise<AcceptTripResponseDto> {
@@ -124,6 +126,19 @@ export class AcceptTripUseCase {
     this.logger.log(
       `Trip ${trip.id} accepted by driver ${dto.driverId}, ETA: ${etaSeconds}s (${etaDistance}m)`,
     );
+
+    // Publish trip.assigned event to Event Bus
+    await this.eventBus.publishTripEvent({
+      type: 'trip.assigned',
+      data: {
+        tripId: updatedTrip.id,
+        riderId: updatedTrip.riderId,
+        driverId: updatedTrip.driverId!,
+        vehicleType: updatedTrip.vehicleType,
+        city: updatedTrip.city,
+        estimatedArrivalMinutes: Math.ceil(etaSeconds / 60),
+      },
+    });
 
     return {
       id: updatedTrip.id,

@@ -5,6 +5,7 @@ import { TripAuditPrismaRepository } from '../../infrastructure/persistence/pris
 import { TripCancellationsPrismaRepository } from '../../infrastructure/persistence/prisma/trip-cancellations-prisma.repository.js';
 import { PinCacheService } from '../../infrastructure/redis/pin-cache.service.js';
 import { TimerService } from '../../infrastructure/redis/timer.service.js';
+import { EventBusService } from '../../../shared/event-bus/event-bus.service.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class CancelTripUseCase {
     private readonly cancellationsRepository: TripCancellationsPrismaRepository,
     private readonly pinCacheService: PinCacheService,
     private readonly timerService: TimerService,
+    private readonly eventBus: EventBusService,
   ) {}
 
   async execute(dto: CancelTripDto): Promise<CancelTripResponseDto> {
@@ -105,6 +107,20 @@ export class CancelTripUseCase {
     this.logger.log(
       `Trip ${dto.tripId} canceled by ${dto.side}, reason: ${dto.reason}`,
     );
+
+    // Publish trip.cancelled event to Event Bus
+    await this.eventBus.publishTripEvent({
+      type: 'trip.cancelled',
+      data: {
+        tripId: updatedTrip.id,
+        riderId: updatedTrip.riderId,
+        driverId: updatedTrip.driverId,
+        cancelledBy: dto.side,
+        reason: dto.reason,
+        cancellationFee: cancellationRecord.feeAppliedDec ? Number(cancellationRecord.feeAppliedDec) : undefined,
+        currency: updatedTrip.pricingSnapshot?.currency,
+      },
+    });
 
     return {
       id: updatedTrip.id,
