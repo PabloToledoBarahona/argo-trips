@@ -84,12 +84,12 @@ export class CompleteTripUseCase {
       );
     }
 
-    // Create payment intent
+    // Create payment intent using the trip's payment method
     const paymentIntent = await this.paymentsClient.createIntent({
       tripId: trip.id,
       amount: finalPricing.total_final,
       currency: finalPricing.currency,
-      method: 'card', // Default to card, could be parameterized
+      method: trip.paymentMethod,
     });
 
     // Transition to COMPLETED

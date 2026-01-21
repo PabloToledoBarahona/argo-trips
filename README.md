@@ -232,8 +232,9 @@ For detailed testing instructions, see [TESTING.md](./TESTING.md).
 #### Trip Management
 
 - `POST /trips` - Create a new trip
-  - **Request**: `{ riderId, vehicleType, originLat, originLng, destLat, destLng, city }`
-  - **Response**: Trip details with pricing quote
+  - **Request**: `{ riderId, vehicleType, city, paymentMethod, originLat, originLng, originH3Res9, destLat, destLng, destH3Res9 }`
+  - **Required Fields**: All fields are required. `paymentMethod` must be `"cash"` or `"qr"`
+  - **Response**: Trip details with pricing quote and payment method
 
 - `PATCH /trips/:id/accept` - Driver accepts trip
   - **Request**: `{ driverId, estimatedArrivalMin }`
@@ -407,6 +408,6 @@ This project is proprietary software developed for the Argo ride-sharing platfor
 
 ---
 
-**Version**: 1.0.0
-**Last Updated**: December 2025
+**Version**: 1.1.0
+**Last Updated**: January 2026
 **Maintained By**: Argo Platform Team

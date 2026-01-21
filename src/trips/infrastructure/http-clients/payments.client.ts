@@ -6,7 +6,7 @@ import { HttpService } from '../../../shared/http/http.service.js';
 // DTOs - Payment Intent
 // ============================================================================
 
-export type PaymentMethod = 'card' | 'cash';
+export type PaymentMethod = 'cash' | 'qr';
 
 export type PaymentIntentStatus =
   | 'requires_payment_method'

@@ -1,4 +1,5 @@
-import { IsString, IsNumber, IsNotEmpty, Min, Max } from 'class-validator';
+import { IsString, IsNumber, IsNotEmpty, Min, Max, IsEnum } from 'class-validator';
+import { PaymentMethod } from '../../domain/enums/payment-method.enum.js';
 
 export class CreateTripDto {
   @IsString()
@@ -12,6 +13,12 @@ export class CreateTripDto {
   @IsString()
   @IsNotEmpty()
   city: string;
+
+  @IsEnum(PaymentMethod, {
+    message: `paymentMethod must be one of: ${Object.values(PaymentMethod).join(', ')}`,
+  })
+  @IsNotEmpty()
+  paymentMethod: PaymentMethod;
 
   @IsNumber()
   @Min(-90)
@@ -58,6 +65,7 @@ export class CreateTripResponseDto {
   status: string;
   riderId: string;
   vehicleType: string;
+  paymentMethod: PaymentMethod;
   requestedAt: Date;
   quoteId: string;
   estimateTotal: number;

@@ -4,7 +4,8 @@ import { Trip, PricingSnapshot } from '../../../domain/entities/trip.entity.js';
 import { TripStatus } from '../../../domain/enums/trip-status.enum.js';
 import { CancelReason } from '../../../domain/enums/cancel-reason.enum.js';
 import { CancelSide } from '../../../domain/enums/cancel-side.enum.js';
-import { Trip as PrismaTrip, TripStatus as PrismaTripStatus, TripCancelReason, TripCancelSide } from '@prisma/client';
+import { PaymentMethod } from '../../../domain/enums/payment-method.enum.js';
+import { Trip as PrismaTrip, TripStatus as PrismaTripStatus, TripCancelReason, TripCancelSide, PaymentMethod as PrismaPaymentMethod } from '@prisma/client';
 
 @Injectable()
 export class TripPrismaRepository {
@@ -16,6 +17,7 @@ export class TripPrismaRepository {
       riderId: trip.riderId,
       driverId: trip.driverId,
       vehicleType: trip.vehicleType,
+      paymentMethod: this.mapPaymentMethodToPrisma(trip.paymentMethod),
       status: this.mapStatusToPrisma(trip.status),
       city: trip.city,
       originLat: trip.originLat,
@@ -115,6 +117,7 @@ export class TripPrismaRepository {
       riderId: prismaTrip.riderId,
       driverId: prismaTrip.driverId ?? undefined,
       vehicleType: prismaTrip.vehicleType,
+      paymentMethod: this.mapPaymentMethodToDomain(prismaTrip.paymentMethod),
       status: this.mapStatusToDomain(prismaTrip.status),
       city: prismaTrip.city,
       originLat: prismaTrip.originLat,
@@ -175,5 +178,21 @@ export class TripPrismaRepository {
       'system': CancelSide.SYSTEM,
     };
     return sideMap[side];
+  }
+
+  private mapPaymentMethodToPrisma(method: PaymentMethod): PrismaPaymentMethod {
+    const methodMap: Record<PaymentMethod, PrismaPaymentMethod> = {
+      [PaymentMethod.CASH]: 'cash' as PrismaPaymentMethod,
+      [PaymentMethod.QR]: 'qr' as PrismaPaymentMethod,
+    };
+    return methodMap[method];
+  }
+
+  private mapPaymentMethodToDomain(method: PrismaPaymentMethod): PaymentMethod {
+    const methodMap: Record<PrismaPaymentMethod, PaymentMethod> = {
+      'cash': PaymentMethod.CASH,
+      'qr': PaymentMethod.QR,
+    };
+    return methodMap[method];
   }
 }

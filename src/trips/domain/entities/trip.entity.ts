@@ -1,6 +1,7 @@
 import { TripStatus } from '../enums/trip-status.enum.js';
 import { CancelReason } from '../enums/cancel-reason.enum.js';
 import { CancelSide } from '../enums/cancel-side.enum.js';
+import { PaymentMethod } from '../enums/payment-method.enum.js';
 
 export interface SpecialChargeSnapshot {
   type: string;
@@ -29,6 +30,7 @@ export class Trip {
   riderId: string;
   driverId?: string;
   vehicleType: string;
+  paymentMethod: PaymentMethod;
   status: TripStatus;
   city: string;
 

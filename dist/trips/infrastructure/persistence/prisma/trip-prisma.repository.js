@@ -14,6 +14,7 @@ const common_1 = require("@nestjs/common");
 const prisma_service_js_1 = require("./prisma.service.js");
 const trip_entity_js_1 = require("../../../domain/entities/trip.entity.js");
 const cancel_side_enum_js_1 = require("../../../domain/enums/cancel-side.enum.js");
+const payment_method_enum_js_1 = require("../../../domain/enums/payment-method.enum.js");
 let TripPrismaRepository = class TripPrismaRepository {
     prisma;
     constructor(prisma) {
@@ -25,6 +26,7 @@ let TripPrismaRepository = class TripPrismaRepository {
             riderId: trip.riderId,
             driverId: trip.driverId,
             vehicleType: trip.vehicleType,
+            paymentMethod: this.mapPaymentMethodToPrisma(trip.paymentMethod),
             status: this.mapStatusToPrisma(trip.status),
             city: trip.city,
             originLat: trip.originLat,
@@ -133,6 +135,7 @@ let TripPrismaRepository = class TripPrismaRepository {
             riderId: prismaTrip.riderId,
             driverId: prismaTrip.driverId ?? undefined,
             vehicleType: prismaTrip.vehicleType,
+            paymentMethod: this.mapPaymentMethodToDomain(prismaTrip.paymentMethod),
             status: this.mapStatusToDomain(prismaTrip.status),
             city: prismaTrip.city,
             originLat: prismaTrip.originLat,
@@ -187,6 +190,20 @@ let TripPrismaRepository = class TripPrismaRepository {
             'system': cancel_side_enum_js_1.CancelSide.SYSTEM,
         };
         return sideMap[side];
+    }
+    mapPaymentMethodToPrisma(method) {
+        const methodMap = {
+            [payment_method_enum_js_1.PaymentMethod.CASH]: 'cash',
+            [payment_method_enum_js_1.PaymentMethod.QR]: 'qr',
+        };
+        return methodMap[method];
+    }
+    mapPaymentMethodToDomain(method) {
+        const methodMap = {
+            'cash': payment_method_enum_js_1.PaymentMethod.CASH,
+            'qr': payment_method_enum_js_1.PaymentMethod.QR,
+        };
+        return methodMap[method];
     }
 };
 exports.TripPrismaRepository = TripPrismaRepository;

@@ -1,6 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '../../../shared/http/http.service.js';
-export type PaymentMethod = 'card' | 'cash';
+export type PaymentMethod = 'cash' | 'qr';
 export type PaymentIntentStatus = 'requires_payment_method' | 'requires_capture' | 'succeeded';
 export interface CreatePaymentIntentRequest {
     tripId: string;

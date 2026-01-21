@@ -11,10 +11,12 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateTripResponseDto = exports.PricingBreakdownDto = exports.CreateTripDto = void 0;
 const class_validator_1 = require("class-validator");
+const payment_method_enum_js_1 = require("../../domain/enums/payment-method.enum.js");
 class CreateTripDto {
     riderId;
     vehicleType;
     city;
+    paymentMethod;
     originLat;
     originLng;
     originH3Res9;
@@ -38,6 +40,13 @@ __decorate([
     (0, class_validator_1.IsNotEmpty)(),
     __metadata("design:type", String)
 ], CreateTripDto.prototype, "city", void 0);
+__decorate([
+    (0, class_validator_1.IsEnum)(payment_method_enum_js_1.PaymentMethod, {
+        message: `paymentMethod must be one of: ${Object.values(payment_method_enum_js_1.PaymentMethod).join(', ')}`,
+    }),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], CreateTripDto.prototype, "paymentMethod", void 0);
 __decorate([
     (0, class_validator_1.IsNumber)(),
     (0, class_validator_1.Min)(-90),
@@ -84,6 +93,7 @@ class CreateTripResponseDto {
     status;
     riderId;
     vehicleType;
+    paymentMethod;
     requestedAt;
     quoteId;
     estimateTotal;

@@ -43,11 +43,17 @@ enum ActorType {
   system
 }
 
+enum PaymentMethod {
+  cash
+  qr
+}
+
 model Trip {
-  id          String  @id @default(cuid())
-  riderId     String  @map("rider_id")
-  driverId    String? @map("driver_id")
-  vehicleType String  @map("vehicle_type")
+  id            String        @id @default(cuid())
+  riderId       String        @map("rider_id")
+  driverId      String?       @map("driver_id")
+  vehicleType   String        @map("vehicle_type")
+  paymentMethod PaymentMethod @map("payment_method")
 
   status TripStatus
 

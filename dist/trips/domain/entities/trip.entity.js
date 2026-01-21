@@ -6,6 +6,7 @@ class Trip {
     riderId;
     driverId;
     vehicleType;
+    paymentMethod;
     status;
     city;
     originLat;

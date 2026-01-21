@@ -15,4 +15,6 @@ export declare class TripPrismaRepository {
     private mapCancelReasonToDomain;
     private mapCancelSideToPrisma;
     private mapCancelSideToDomain;
+    private mapPaymentMethodToPrisma;
+    private mapPaymentMethodToDomain;
 }

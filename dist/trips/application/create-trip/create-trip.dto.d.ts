@@ -1,7 +1,9 @@
+import { PaymentMethod } from '../../domain/enums/payment-method.enum.js';
 export declare class CreateTripDto {
     riderId: string;
     vehicleType: string;
     city: string;
+    paymentMethod: PaymentMethod;
     originLat: number;
     originLng: number;
     originH3Res9: string;
@@ -24,6 +26,7 @@ export declare class CreateTripResponseDto {
     status: string;
     riderId: string;
     vehicleType: string;
+    paymentMethod: PaymentMethod;
     requestedAt: Date;
     quoteId: string;
     estimateTotal: number;

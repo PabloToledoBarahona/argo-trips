@@ -73,7 +73,7 @@ let CompleteTripUseCase = CompleteTripUseCase_1 = class CompleteTripUseCase {
             tripId: trip.id,
             amount: finalPricing.total_final,
             currency: finalPricing.currency,
-            method: 'card',
+            method: trip.paymentMethod,
         });
         const completedAt = new Date();
         const updatedTrip = await this.tripRepository.update(trip.id, {
