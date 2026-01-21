@@ -6,13 +6,15 @@ import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/tr
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
 import { GeoClient } from '../../infrastructure/http-clients/geo.client.js';
 import { PricingClient, QuoteResponse } from '../../infrastructure/http-clients/pricing.client.js';
+import { EventBusService } from '../../../shared/event-bus/event-bus.service.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
 import { PaymentMethod } from '../../domain/enums/payment-method.enum.js';
 import { Trip } from '../../domain/entities/trip.entity.js';
 
-// Mock uuid module
-jest.mock('uuid', () => ({
-  v4: jest.fn(() => 'trip-123'),
+// Mock crypto.randomUUID
+jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
+  randomUUID: jest.fn(() => 'trip-123'),
 }));
 
 describe('CreateTripUseCase', () => {
@@ -87,6 +89,13 @@ describe('CreateTripUseCase', () => {
       finalize: jest.fn(),
     };
 
+    const mockEventBusService = {
+      publishTripEvent: jest.fn().mockResolvedValue('event-123'),
+      isAvailable: jest.fn().mockReturnValue(true),
+      registerHandler: jest.fn(),
+      markHandlersReady: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CreateTripUseCase,
@@ -94,6 +103,7 @@ describe('CreateTripUseCase', () => {
         { provide: TripAuditPrismaRepository, useValue: mockAuditRepository },
         { provide: GeoClient, useValue: mockGeoClient },
         { provide: PricingClient, useValue: mockPricingClient },
+        { provide: EventBusService, useValue: mockEventBusService },
       ],
     }).compile();
 

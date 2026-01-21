@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { CreateTripDto, CreateTripResponseDto } from './create-trip.dto.js';
 import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/trip-prisma.repository.js';
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
@@ -27,7 +27,7 @@ export class CreateTripUseCase {
     this.logger.debug(`Creating trip for rider: ${dto.riderId}`);
 
     // Generate unique trip ID
-    const tripId = uuidv4();
+    const tripId = randomUUID();
     const paymentMethod =
       dto.paymentMethod ?? dto.payment_method ?? dto.payment_channel;
 

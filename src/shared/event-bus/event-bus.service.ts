@@ -1,15 +1,13 @@
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
+import * as os from 'os';
 import {
   BaseEvent,
   TripEvent,
-  PaymentEvent,
-  DriverEvent,
   STREAM_NAMES,
   CONSUMER_GROUP,
-  CONSUMER_NAME,
 } from './events.interface.js';
 
 /**
@@ -36,13 +34,21 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
   private isConnected = false;
   private readonly SOURCE = 'ms04-trips';
 
+  // Unique consumer name per instance (hostname-pid for horizontal scaling)
+  private readonly consumerName = `trips-consumer-${os.hostname()}-${process.pid}`;
+
   // Event handlers registry
   private eventHandlers: Map<string, (event: BaseEvent) => Promise<void>> = new Map();
 
   // Consumer polling interval
   private consumerInterval: NodeJS.Timeout | null = null;
   private readonly POLL_INTERVAL_MS = 1000;
-  private readonly BLOCK_TIME_MS = 5000;
+  private readonly PEL_CHECK_INTERVAL_MS = 30000; // Check pending messages every 30s
+  private readonly PEL_IDLE_TIME_MS = 60000; // Claim messages idle for 60s
+  private pelCheckInterval: NodeJS.Timeout | null = null;
+
+  // Flag to track if handlers are ready
+  private handlersReady = false;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -64,11 +70,15 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
         lazyConnect: true,
       });
 
-      await this.client.connect();
-
+      // Register event listeners BEFORE connecting (fix for isConnected issue)
       this.client.on('connect', () => {
         this.isConnected = true;
         this.logger.log('Event Bus Redis connected');
+      });
+
+      this.client.on('ready', () => {
+        this.isConnected = true;
+        this.logger.log('Event Bus Redis ready');
       });
 
       this.client.on('error', (error) => {
@@ -80,22 +90,48 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn('Event Bus Redis connection closed');
       });
 
+      // Now connect
+      await this.client.connect();
+
+      // Set isConnected based on actual connection state
+      this.isConnected = this.client.status === 'ready' || this.client.status === 'connect';
+
       // Create consumer groups for streams we want to consume
       await this.ensureConsumerGroups();
 
-      // Start consuming events
-      this.startConsumer();
-
-      this.logger.log('Event Bus initialized successfully');
+      // NOTE: Consumer is NOT started here - it will start when handlers are marked ready
+      // This prevents events from being acked before handlers are registered
+      this.logger.log(`Event Bus initialized (consumer: ${this.consumerName})`);
     } catch (error) {
       this.logger.error('Failed to initialize Event Bus', error);
       // Don't throw - allow service to run without Event Bus
     }
   }
 
+  /**
+   * Mark handlers as ready and start consumer
+   * Should be called after all event handlers are registered
+   */
+  markHandlersReady(): void {
+    if (this.handlersReady) return;
+
+    this.handlersReady = true;
+    this.logger.log('Event handlers marked as ready, starting consumer...');
+
+    // Start consuming events only after handlers are ready
+    this.startConsumer();
+
+    // Start PEL recovery process
+    this.startPelRecovery();
+  }
+
   async onModuleDestroy(): Promise<void> {
     if (this.consumerInterval) {
       clearInterval(this.consumerInterval);
+    }
+
+    if (this.pelCheckInterval) {
+      clearInterval(this.pelCheckInterval);
     }
 
     if (this.client) {
@@ -117,7 +153,7 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
   async publishTripEvent(event: Omit<TripEvent, 'id' | 'source' | 'timestamp'>): Promise<string | null> {
     return this.publish(STREAM_NAMES.TRIPS, {
       ...event,
-      id: uuidv4(),
+      id: randomUUID(),
       source: this.SOURCE,
       timestamp: new Date().toISOString(),
     } as TripEvent);
@@ -188,13 +224,67 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
    * Start the consumer loop
    */
   private startConsumer(): void {
-    if (!this.client) return;
+    if (!this.client || !this.handlersReady) return;
 
     this.consumerInterval = setInterval(async () => {
       await this.consumeEvents();
     }, this.POLL_INTERVAL_MS);
 
-    this.logger.log('Event consumer started');
+    this.logger.log(`Event consumer started (${this.consumerName})`);
+  }
+
+  /**
+   * Start PEL (Pending Entries List) recovery process
+   * This claims and re-processes messages that were not acknowledged
+   */
+  private startPelRecovery(): void {
+    if (!this.client || !this.handlersReady) return;
+
+    this.pelCheckInterval = setInterval(async () => {
+      await this.processPendingMessages();
+    }, this.PEL_CHECK_INTERVAL_MS);
+
+    this.logger.log('PEL recovery process started');
+  }
+
+  /**
+   * Process pending messages (PEL) that were not acknowledged
+   * Uses XAUTOCLAIM to claim and re-process idle messages
+   */
+  private async processPendingMessages(): Promise<void> {
+    if (!this.isAvailable() || !this.handlersReady) return;
+
+    const streamsToConsume = [STREAM_NAMES.PAYMENTS, STREAM_NAMES.DRIVERS];
+
+    for (const stream of streamsToConsume) {
+      try {
+        // XAUTOCLAIM stream group consumer min-idle-time start [COUNT count]
+        // Returns messages that have been idle for more than min-idle-time
+        const result = await this.client!.call(
+          'XAUTOCLAIM',
+          stream,
+          CONSUMER_GROUP,
+          this.consumerName,
+          this.PEL_IDLE_TIME_MS.toString(),
+          '0-0', // Start from beginning of PEL
+          'COUNT', '10',
+        ) as [string, [string, string[]][], string[]];
+
+        if (!result || !result[1] || result[1].length === 0) continue;
+
+        const [_nextId, messages, _deletedIds] = result;
+
+        for (const [messageId, fields] of messages) {
+          this.logger.log(`Recovering pending message ${messageId} from ${stream}`);
+          await this.processMessage(stream, messageId, fields);
+        }
+      } catch (error: any) {
+        // Ignore NOGROUP errors (stream doesn't exist yet)
+        if (!error.message?.includes('NOGROUP')) {
+          this.logger.error(`Error processing PEL for ${stream}`, error);
+        }
+      }
+    }
   }
 
   /**
@@ -213,7 +303,7 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
         type StreamResult = [string, StreamMessage[]];
 
         const results = await this.client!.xreadgroup(
-          'GROUP', CONSUMER_GROUP, CONSUMER_NAME,
+          'GROUP', CONSUMER_GROUP, this.consumerName,
           'COUNT', '10',
           'BLOCK', '100',
           'STREAMS', stream, '>',

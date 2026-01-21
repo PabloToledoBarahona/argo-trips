@@ -6,6 +6,7 @@ import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/tr
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
 import { PricingClient, FinalizeResponse } from '../../infrastructure/http-clients/pricing.client.js';
 import { PaymentsClient } from '../../infrastructure/http-clients/payments.client.js';
+import { EventBusService } from '../../../shared/event-bus/event-bus.service.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
 import { PaymentMethod } from '../../domain/enums/payment-method.enum.js';
 import { Trip } from '../../domain/entities/trip.entity.js';
@@ -91,6 +92,13 @@ describe('CompleteTripUseCase', () => {
       getIntent: jest.fn(),
     };
 
+    const mockEventBusService = {
+      publishTripEvent: jest.fn().mockResolvedValue('event-123'),
+      isAvailable: jest.fn().mockReturnValue(true),
+      registerHandler: jest.fn(),
+      markHandlersReady: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         CompleteTripUseCase,
@@ -98,6 +106,7 @@ describe('CompleteTripUseCase', () => {
         { provide: TripAuditPrismaRepository, useValue: mockAuditRepository },
         { provide: PricingClient, useValue: mockPricingClient },
         { provide: PaymentsClient, useValue: mockPaymentsClient },
+        { provide: EventBusService, useValue: mockEventBusService },
       ],
     }).compile();
 

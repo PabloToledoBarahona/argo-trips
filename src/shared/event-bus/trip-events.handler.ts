@@ -35,7 +35,11 @@ export class TripEventsHandler implements OnModuleInit {
     this.eventBus.registerHandler('payment.failed', this.handlePaymentFailed.bind(this));
     this.eventBus.registerHandler('driver.offline', this.handleDriverOffline.bind(this));
 
-    this.logger.log('Trip event handlers registered');
+    // Mark handlers as ready - this starts the consumer
+    // IMPORTANT: This must be called AFTER all handlers are registered
+    this.eventBus.markHandlersReady();
+
+    this.logger.log('Trip event handlers registered and consumer started');
   }
 
   /**

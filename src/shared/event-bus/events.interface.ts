@@ -158,4 +158,5 @@ export const STREAM_NAMES = {
 } as const;
 
 export const CONSUMER_GROUP = 'trips-service';
-export const CONSUMER_NAME = 'trips-consumer-1';
+// NOTE: CONSUMER_NAME is now generated dynamically per instance in EventBusService
+// using hostname-pid pattern for horizontal scaling support
