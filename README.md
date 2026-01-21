@@ -434,7 +434,7 @@ aws ecs describe-services \
 | **AWS Account** | `522195962216` | New optimized account |
 | **Region** | `us-east-2` | Ohio |
 | **ECS Cluster** | `argo-cluster` | Shared cluster |
-| **Subnet (dev)** | `subnet-09d829aab7d6307a6` | Single-AZ: us-east-2a |
+| **Subnet (dev)** | `subnet-0b4c21951177fbb2c` | Single-AZ: us-east-2a |
 | **Security Group** | `sg-0be38c7c217448d01` | ECS tasks SG |
 | **Cloud Map** | `argo.local` | Service discovery namespace |
 | **ALB** | `argo-shared-alb-828452645...` | Shared ALB with path routing |

@@ -34,7 +34,7 @@ export CLOUD_MAP_NAMESPACE="argo.local"
 export BUILDX_BUILDER="argo-builder"
 
 # Infraestructura compartida (Single-AZ para desarrollo)
-export SUBNET_ID="subnet-09d829aab7d6307a6"  # us-east-2a únicamente
+export SUBNET_ID="subnet-0b4c21951177fbb2c"  # us-east-2a únicamente
 export SECURITY_GROUP_ID="sg-0be38c7c217448d01"  # ECS tasks security group
 export EXECUTION_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole"
 
