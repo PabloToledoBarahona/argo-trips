@@ -203,7 +203,7 @@ export class GeoClient implements OnModuleInit {
     // Base URL MUST include /geo prefix for API Gateway routing
     this.baseUrl =
       this.configService.get<string>('GEO_SERVICE_URL') ||
-      'http://alb-argo-gateway-1317937741.us-east-2.elb.amazonaws.com/geo';
+      'http://argo-shared-alb-828452645.us-east-2.elb.amazonaws.com/geo';
 
     // Initialize circuit breakers for each endpoint
     this.etaCircuitBreaker = new CircuitBreaker('geo-eta', {

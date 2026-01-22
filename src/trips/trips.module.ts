@@ -34,6 +34,8 @@ import { DriverSessionsClient } from './infrastructure/http-clients/driver-sessi
 
 // Interfaces
 import { TripsController } from './interfaces/http/trips.controller.js';
+import { TripsRootController } from './interfaces/http/trips-root.controller.js';
+import { TripsHttpHandler } from './interfaces/http/trips.handler.js';
 import { PaymentsEventsHandler } from './interfaces/events/payments.events.handler.js';
 import { DriverSessionsEventsHandler } from './interfaces/events/driver-sessions.events.handler.js';
 import { TripsJobsProcessor } from './interfaces/jobs/trips.jobs.processor.js';
@@ -43,7 +45,7 @@ import { TripEventsHandler } from '../shared/event-bus/trip-events.handler.js';
 
 @Module({
   imports: [SharedModule],
-  controllers: [TripsController],
+  controllers: [TripsController, TripsRootController],
   providers: [
     // Domain
     TripStateMachine,
@@ -77,6 +79,7 @@ import { TripEventsHandler } from '../shared/event-bus/trip-events.handler.js';
     DriverSessionsClient,
 
     // Interfaces
+    TripsHttpHandler,
     PaymentsEventsHandler,
     DriverSessionsEventsHandler,
     TripsJobsProcessor,

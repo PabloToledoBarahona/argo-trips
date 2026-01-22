@@ -190,7 +190,7 @@ PRICING_SERVICE_URL="http://gateway-url/pricing"
 GEO_SERVICE_URL="http://gateway-url/geo"
 DRIVER_SESSIONS_SERVICE_URL="http://gateway-url/driver-sessions"
 AUTH_SERVICE_URL="http://gateway-url/auth"
-PAYMENTS_URL="http://gateway-url/payments"
+PAYMENTS_SERVICE_URL="http://gateway-url/payments"
 
 # Service Authentication
 SERVICE_ID="argo-trips"
@@ -286,13 +286,16 @@ For detailed testing instructions, see [TESTING.md](./TESTING.md).
 
 #### Trip Management
 
+- **Gateway routing**: In production the Gateway rewrites `/trips/*` to `/*`. This service exposes both `/trips/*` and `/*` to stay compatible.
+
 - `POST /trips` - Create a new trip
-  - **Request**: `{ riderId, vehicleType, city, paymentMethod, originLat, originLng, originH3Res9, destLat, destLng, destH3Res9 }`
-  - **Required Fields**: All fields are required. `paymentMethod` must be `"cash"` or `"qr"`
+  - **Request**: `{ riderId, vehicleType, city, paymentMethod|payment_method|payment_channel, originLat, originLng, destLat, destLng, originH3Res9?, destH3Res9? }`
+  - **Required Fields**: All fields except `originH3Res9` and `destH3Res9`. If H3 indices are omitted, MS10-GEO must be available.
+  - **Payment Method**: Must be `"cash"` or `"qr"`
   - **Response**: Trip details with pricing quote and payment method
 
 - `PATCH /trips/:id/accept` - Driver accepts trip
-  - **Request**: `{ driverId, estimatedArrivalMin }`
+  - **Request**: `{ driverId }`
   - **Response**: Updated trip with driver assignment
 
 - `POST /trips/:id/pin/verify` - Verify rider PIN
@@ -303,16 +306,16 @@ For detailed testing instructions, see [TESTING.md](./TESTING.md).
   - **Response**: Trip status updated to IN_PROGRESS
 
 - `PATCH /trips/:id/complete` - Complete trip
-  - **Request**: `{ finalLat, finalLng, distanceMeters, durationSeconds }`
+  - **Request**: `{ distance_m_final?, duration_s_final? }`
   - **Response**: Final pricing and payment intent
 
 - `PATCH /trips/:id/cancel` - Cancel trip
-  - **Request**: `{ reason, cancelledBy }`
+  - **Request**: `{ reason, side, notes? }`
   - **Response**: Cancelled trip with cancellation details
 
 ### Authentication
 
-All endpoints require JWT authentication via the `Authorization: Bearer <token>` header.
+All endpoints expect `X-JWT-Payload` (base64 JSON) injected by the Gateway. Direct calls must include this header.
 
 Service-to-service calls use automatically managed service tokens obtained from MS02-AUTH.
 
@@ -335,8 +338,8 @@ Service-to-service calls use automatically managed service tokens obtained from 
 - **Integration**: H3 encoding, geocoding, route calculation
 - **Endpoints**:
   - `POST /h3/encode` - Convert coordinates to H3 index
-  - `POST /geocode/forward` - Address to coordinates
   - `POST /route` - Calculate route between points
+  - `POST /eta` - ETA from driver to pickup
 
 ### MS03-DRIVER-SESSIONS - Driver Management
 - **Purpose**: Driver availability and location
@@ -348,7 +351,7 @@ Service-to-service calls use automatically managed service tokens obtained from 
 ### MS07-PAYMENTS - Payment Processing
 - **Purpose**: Payment intent creation
 - **Integration**: Automated payment processing on trip completion
-- **Endpoint**: `POST /payment-intents` - Create payment intent
+- **Endpoint**: `POST /payments/intents` - Create payment intent
 
 ## Deployment
 

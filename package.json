@@ -20,7 +20,10 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "mock:payments": "node scripts/mock-payments.js",
+    "mock:deps": "node scripts/mock-deps.js",
+    "set:trip-pin": "node scripts/set-trip-pin.js"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",

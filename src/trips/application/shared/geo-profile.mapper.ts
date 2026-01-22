@@ -12,9 +12,8 @@ export type GeoVehicleProfile = 'car' | 'moto';
  * Map TRIPS vehicle type to GEO vehicle profile
  *
  * Mapping logic:
- * - economy → car (standard sedan/hatchback)
- * - premium → car (luxury sedan/SUV)
- * - delivery → moto (motorcycle for fast delivery)
+ * - economy/comfort/premium/xl → car (standard or larger vehicle)
+ * - moto/delivery → moto (motorcycle profile)
  *
  * @param vehicleType - TRIPS vehicle type ('economy', 'premium', 'delivery')
  * @returns GEO vehicle profile ('car' or 'moto')
@@ -25,15 +24,18 @@ export function mapToGeoProfile(vehicleType: string): GeoVehicleProfile {
 
   switch (normalized) {
     case 'economy':
+    case 'comfort':
     case 'premium':
+    case 'xl':
       return 'car';
 
+    case 'moto':
     case 'delivery':
       return 'moto';
 
     default:
       throw new BadRequestException(
-        `Cannot map vehicle type "${vehicleType}" to GEO profile. Supported types: economy, premium, delivery`,
+        `Cannot map vehicle type "${vehicleType}" to GEO profile. Supported types: economy, comfort, premium, xl, moto, delivery`,
       );
   }
 }

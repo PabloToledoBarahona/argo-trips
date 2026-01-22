@@ -53,11 +53,19 @@ export class EventBusService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly configService: ConfigService) {}
 
   async onModuleInit(): Promise<void> {
-    const eventBusUrl = this.configService.get<string>('REDIS_EVENT_BUS_URL');
+    const configuredEventBusUrl = this.configService.get<string>('REDIS_EVENT_BUS_URL');
+    const fallbackRedisUrl = this.configService.get<string>('REDIS_URL');
+    const eventBusUrl = configuredEventBusUrl || fallbackRedisUrl;
 
     if (!eventBusUrl) {
       this.logger.warn('REDIS_EVENT_BUS_URL not configured - Event Bus disabled');
       return;
+    }
+
+    if (!configuredEventBusUrl && fallbackRedisUrl) {
+      this.logger.warn(
+        'REDIS_EVENT_BUS_URL not set - using REDIS_URL for Event Bus (shared Redis)',
+      );
     }
 
     try {

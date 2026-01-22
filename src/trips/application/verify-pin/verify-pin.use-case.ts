@@ -1,10 +1,11 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { VerifyPinDto, VerifyPinResponseDto } from './verify-pin.dto.js';
 import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/trip-prisma.repository.js';
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
 import { PinCacheService } from '../../infrastructure/redis/pin-cache.service.js';
 import { TimerService } from '../../infrastructure/redis/timer.service.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
+import type { ActorContext } from '../shared/actor-context.js';
 
 @Injectable()
 export class VerifyPinUseCase {
@@ -18,13 +19,17 @@ export class VerifyPinUseCase {
     private readonly timerService: TimerService,
   ) {}
 
-  async execute(dto: VerifyPinDto): Promise<VerifyPinResponseDto> {
+  async execute(dto: VerifyPinDto, actor?: ActorContext): Promise<VerifyPinResponseDto> {
     this.logger.debug(`Verifying PIN for trip ${dto.tripId}`);
 
     // Find trip
     const trip = await this.tripRepository.findById(dto.tripId);
     if (!trip) {
       throw new NotFoundException(`Trip ${dto.tripId} not found`);
+    }
+
+    if (actor?.role === 'rider' && actor.id !== trip.riderId) {
+      throw new ForbiddenException('rider is not assigned to this trip');
     }
 
     // Validate trip is in ASSIGNED status

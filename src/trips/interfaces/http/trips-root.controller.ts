@@ -9,8 +9,8 @@ import { CurrentUser } from '../../../shared/auth/decorators/current-user.decora
 import type { ArgoUser } from '../../../shared/auth/types/argo-user.type.js';
 import { TripsHttpHandler } from './trips.handler.js';
 
-@Controller('trips')
-export class TripsController {
+@Controller()
+export class TripsRootController {
   constructor(private readonly handler: TripsHttpHandler) {}
 
   @Post()

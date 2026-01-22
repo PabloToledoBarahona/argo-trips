@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CompleteTripDto, CompleteTripResponseDto } from './complete-trip.dto.js';
 import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/trip-prisma.repository.js';
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
@@ -8,6 +8,7 @@ import { EventBusService } from '../../../shared/event-bus/event-bus.service.js'
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
 import { PricingSnapshot } from '../../domain/entities/trip.entity.js';
 import { mapToPricingVehicleType } from '../shared/vehicle-type.mapper.js';
+import type { ActorContext } from '../shared/actor-context.js';
 
 @Injectable()
 export class CompleteTripUseCase {
@@ -21,13 +22,19 @@ export class CompleteTripUseCase {
     private readonly eventBus: EventBusService,
   ) {}
 
-  async execute(dto: CompleteTripDto): Promise<CompleteTripResponseDto> {
+  async execute(dto: CompleteTripDto, actor?: ActorContext): Promise<CompleteTripResponseDto> {
     this.logger.debug(`Completing trip ${dto.tripId}`);
 
     // Find trip
     const trip = await this.tripRepository.findById(dto.tripId);
     if (!trip) {
       throw new NotFoundException(`Trip ${dto.tripId} not found`);
+    }
+
+    if (actor?.role === 'driver') {
+      if (!trip.driverId || trip.driverId !== actor.id) {
+        throw new ForbiddenException('driver is not assigned to this trip');
+      }
     }
 
     // Validate trip is in IN_PROGRESS status

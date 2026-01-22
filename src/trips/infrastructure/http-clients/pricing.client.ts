@@ -192,7 +192,7 @@ export class PricingClient implements OnModuleInit {
     // Base URL MUST include /pricing prefix for API Gateway routing
     this.baseUrl =
       this.configService.get<string>('PRICING_SERVICE_URL') ||
-      'http://alb-argo-gateway-1317937741.us-east-2.elb.amazonaws.com/pricing';
+      'http://argo-shared-alb-828452645.us-east-2.elb.amazonaws.com/pricing';
 
     // Initialize circuit breakers for each endpoint
     this.quoteCircuitBreaker = new CircuitBreaker('pricing-quote', {

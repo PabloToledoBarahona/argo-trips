@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { CancelTripDto, CancelTripResponseDto } from './cancel-trip.dto.js';
 import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/trip-prisma.repository.js';
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
@@ -7,6 +7,7 @@ import { PinCacheService } from '../../infrastructure/redis/pin-cache.service.js
 import { TimerService } from '../../infrastructure/redis/timer.service.js';
 import { EventBusService } from '../../../shared/event-bus/event-bus.service.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
+import type { ActorContext } from '../shared/actor-context.js';
 
 @Injectable()
 export class CancelTripUseCase {
@@ -21,13 +22,30 @@ export class CancelTripUseCase {
     private readonly eventBus: EventBusService,
   ) {}
 
-  async execute(dto: CancelTripDto): Promise<CancelTripResponseDto> {
+  async execute(dto: CancelTripDto, actor?: ActorContext): Promise<CancelTripResponseDto> {
     this.logger.debug(`Canceling trip ${dto.tripId}, reason: ${dto.reason}, side: ${dto.side}`);
 
     // Find trip
     const trip = await this.tripRepository.findById(dto.tripId);
     if (!trip) {
       throw new NotFoundException(`Trip ${dto.tripId} not found`);
+    }
+
+    if (actor?.role && actor.role !== 'admin') {
+      if (dto.side === 'rider' && actor.role !== 'rider') {
+        throw new ForbiddenException('cancel side does not match actor role');
+      }
+      if (dto.side === 'driver' && actor.role !== 'driver') {
+        throw new ForbiddenException('cancel side does not match actor role');
+      }
+
+      if (dto.side === 'rider' && trip.riderId !== actor.id) {
+        throw new ForbiddenException('rider is not assigned to this trip');
+      }
+
+      if (dto.side === 'driver' && trip.driverId !== actor.id) {
+        throw new ForbiddenException('driver is not assigned to this trip');
+      }
     }
 
     // Validate trip can be canceled (not already COMPLETED, PAID, or CANCELED)

@@ -97,7 +97,7 @@ export class DriverSessionsClient implements OnModuleInit {
     // Base URL MUST include /driver-sessions prefix for API Gateway routing
     this.baseUrl =
       this.configService.get<string>('DRIVER_SESSIONS_SERVICE_URL') ||
-      'http://alb-argo-gateway-1317937741.us-east-2.elb.amazonaws.com/driver-sessions';
+      'http://argo-shared-alb-828452645.us-east-2.elb.amazonaws.com/driver-sessions';
 
     // Initialize circuit breakers for each endpoint
     this.sessionCircuitBreaker = new CircuitBreaker('driver-sessions-session', {

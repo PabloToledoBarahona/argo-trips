@@ -1,4 +1,4 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { AcceptTripDto, AcceptTripResponseDto } from './accept-trip.dto.js';
 import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/trip-prisma.repository.js';
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
@@ -9,6 +9,7 @@ import { TimerService } from '../../infrastructure/redis/timer.service.js';
 import { EventBusService } from '../../../shared/event-bus/event-bus.service.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
 import { mapToGeoProfile } from '../shared/geo-profile.mapper.js';
+import type { ActorContext } from '../shared/actor-context.js';
 
 @Injectable()
 export class AcceptTripUseCase {
@@ -26,7 +27,7 @@ export class AcceptTripUseCase {
     private readonly eventBus: EventBusService,
   ) {}
 
-  async execute(dto: AcceptTripDto): Promise<AcceptTripResponseDto> {
+  async execute(dto: AcceptTripDto, actor?: ActorContext): Promise<AcceptTripResponseDto> {
     this.logger.debug(`Driver ${dto.driverId} accepting trip ${dto.tripId}`);
 
     // Find trip
@@ -40,6 +41,10 @@ export class AcceptTripUseCase {
       throw new BadRequestException(
         `Trip ${dto.tripId} cannot be accepted from status ${trip.status}`,
       );
+    }
+
+    if (actor?.role === 'driver' && actor.id !== dto.driverId) {
+      throw new ForbiddenException('driverId does not match authenticated user');
     }
 
     // Validate driver is online and eligible

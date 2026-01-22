@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { CreateTripDto, CreateTripResponseDto } from './create-trip.dto.js';
 import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/trip-prisma.repository.js';
@@ -10,6 +10,7 @@ import { PricingSnapshot, Trip } from '../../domain/entities/trip.entity.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
 import { mapToPricingVehicleType } from '../shared/vehicle-type.mapper.js';
 import { mapToGeoProfile } from '../shared/geo-profile.mapper.js';
+import type { ActorContext } from '../shared/actor-context.js';
 
 @Injectable()
 export class CreateTripUseCase {
@@ -23,7 +24,7 @@ export class CreateTripUseCase {
     private readonly eventBus: EventBusService,
   ) {}
 
-  async execute(dto: CreateTripDto): Promise<CreateTripResponseDto> {
+  async execute(dto: CreateTripDto, actor?: ActorContext): Promise<CreateTripResponseDto> {
     this.logger.debug(`Creating trip for rider: ${dto.riderId}`);
 
     // Generate unique trip ID
@@ -33,6 +34,10 @@ export class CreateTripUseCase {
 
     if (!paymentMethod) {
       throw new BadRequestException('paymentMethod is required');
+    }
+
+    if (actor?.role === 'rider' && actor.id !== dto.riderId) {
+      throw new ForbiddenException('riderId does not match authenticated user');
     }
 
     const originCoordinates = { lat: dto.originLat, lng: dto.originLng };

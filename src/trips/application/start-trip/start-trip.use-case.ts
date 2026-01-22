@@ -1,9 +1,10 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { StartTripDto, StartTripResponseDto } from './start-trip.dto.js';
 import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/trip-prisma.repository.js';
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
 import { TimerService } from '../../infrastructure/redis/timer.service.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
+import type { ActorContext } from '../shared/actor-context.js';
 
 @Injectable()
 export class StartTripUseCase {
@@ -15,13 +16,19 @@ export class StartTripUseCase {
     private readonly timerService: TimerService,
   ) {}
 
-  async execute(dto: StartTripDto): Promise<StartTripResponseDto> {
+  async execute(dto: StartTripDto, actor?: ActorContext): Promise<StartTripResponseDto> {
     this.logger.debug(`Starting trip ${dto.tripId}`);
 
     // Find trip
     const trip = await this.tripRepository.findById(dto.tripId);
     if (!trip) {
       throw new NotFoundException(`Trip ${dto.tripId} not found`);
+    }
+
+    if (actor?.role === 'driver') {
+      if (!trip.driverId || trip.driverId !== actor.id) {
+        throw new ForbiddenException('driver is not assigned to this trip');
+      }
     }
 
     // Validate trip is in PICKUP_STARTED status

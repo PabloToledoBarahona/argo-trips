@@ -56,7 +56,7 @@ export class ServiceTokenService implements OnModuleInit {
     private readonly httpService: HttpService,
   ) {
     this.authServiceUrl = this.configService.get<string>('AUTH_SERVICE_URL') ||
-      'http://alb-argo-gateway-1317937741.us-east-2.elb.amazonaws.com/auth';
+      'http://argo-shared-alb-828452645.us-east-2.elb.amazonaws.com/auth';
     this.serviceEmail = this.configService.get<string>('SERVICE_EMAIL') ||
       'service-trips@argo.internal';
     this.servicePassword = this.configService.get<string>('SERVICE_PASSWORD') ||

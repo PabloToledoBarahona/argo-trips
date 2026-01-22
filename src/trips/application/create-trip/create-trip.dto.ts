@@ -101,8 +101,9 @@ export class CreateTripDto {
   originLng: number;
 
   @IsString()
+  @IsOptional()
   @IsNotEmpty()
-  originH3Res9: string;
+  originH3Res9?: string;
 
   @IsNumber()
   @Min(-90)
@@ -115,8 +116,9 @@ export class CreateTripDto {
   destLng: number;
 
   @IsString()
+  @IsOptional()
   @IsNotEmpty()
-  destH3Res9: string;
+  destH3Res9?: string;
 }
 
 export class PricingBreakdownDto {
