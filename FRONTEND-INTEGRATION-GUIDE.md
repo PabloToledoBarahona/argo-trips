@@ -1,8 +1,22 @@
 # Guía de Integración - MS04 TRIPS
 
-**Versión:** 1.1.0
+**Versión:** 1.2.0
 **Última Actualización:** Enero 2026
 **Audiencia:** Equipos de Frontend Web y Móvil
+
+---
+
+> ⚠️ **AVISO IMPORTANTE - BLOQUEO PARCIAL**
+>
+> El microservicio **MS07-PAYMENTS aún no ha sido desarrollado**. Esto significa que:
+> - El endpoint `PATCH /trips/:id/complete` **fallará** al intentar crear la intención de pago
+> - La transición a estado `PAID` no es posible actualmente
+> - El equipo de frontend puede integrar ~80% del flujo (crear trip, aceptar, verificar PIN, iniciar, cancelar)
+> - El flujo de **completar viaje y pago** estará disponible cuando MS07-PAYMENTS sea desplegado
+>
+> **Estados disponibles para integración:** `REQUESTED`, `OFFERED`, `ASSIGNED`, `PICKUP_STARTED`, `IN_PROGRESS`, `CANCELED`
+>
+> **Estados bloqueados:** `COMPLETED` (parcial), `PAID`
 
 ---
 
@@ -161,14 +175,18 @@ Todas las respuestas del servicio utilizan formato JSON.
 
 Un viaje pasa por los siguientes estados durante su ciclo de vida:
 
-| Estado | Descripción | Siguiente Estado Posible |
-|--------|-------------|-------------------------|
-| `REQUESTED` | Viaje solicitado por el pasajero | `ASSIGNED`, `CANCELED` |
-| `ASSIGNED` | Conductor asignado al viaje | `IN_PROGRESS`, `CANCELED` |
-| `IN_PROGRESS` | Viaje en curso | `COMPLETED`, `CANCELED` |
-| `COMPLETED` | Viaje finalizado | `PAID` |
-| `PAID` | Pago procesado | - |
-| `CANCELED` | Viaje cancelado | - |
+| Estado | Descripción | Siguiente Estado Posible | Disponible |
+|--------|-------------|-------------------------|------------|
+| `REQUESTED` | Viaje solicitado por el pasajero | `OFFERED`, `CANCELED` | ✅ |
+| `OFFERED` | Viaje ofrecido a conductores cercanos | `ASSIGNED`, `CANCELED` | ✅ |
+| `ASSIGNED` | Conductor asignado al viaje | `PICKUP_STARTED`, `CANCELED` | ✅ |
+| `PICKUP_STARTED` | PIN verificado, conductor en punto de recogida | `IN_PROGRESS`, `CANCELED` | ✅ |
+| `IN_PROGRESS` | Viaje en curso | `COMPLETED`, `CANCELED` | ✅ |
+| `COMPLETED` | Viaje finalizado, precio calculado | `PAID` | ⚠️ Parcial* |
+| `PAID` | Pago procesado exitosamente | - | ❌ Bloqueado* |
+| `CANCELED` | Viaje cancelado | - | ✅ |
+
+> *\*Estados `COMPLETED` y `PAID` dependen de MS07-PAYMENTS que aún no está desarrollado. El endpoint `/complete` fallará al intentar crear el payment intent.*
 
 ### 4.2 Diagrama de Flujo
 
@@ -180,55 +198,74 @@ Un viaje pasa por los siguientes estados durante su ciclo de vida:
     |                              |                           |
     |<----- REQUESTED (con cotización) --------------------------|
     |                              |                           |
+    |                              |        [Dispatch interno] |
+    |                              |                           |
+    |<-------------------------------- OFFERED -----------------|
+    |                              |                           |
     |                              | 2. PATCH /trips/:id/accept|
     |                              |-------------------------->|
     |                              |                           |
-    |<-------------------------------- ASSIGNED ----------------|
+    |<-------------------------------- ASSIGNED (PIN generado) -|
     |                              |                           |
     | 3. POST /trips/:id/pin/verify                           |
     |-------------------------------------------------------------->|
     |                              |                           |
-    |<-------------------------------- VERIFIED ----------------|
+    |<-------------------------------- PICKUP_STARTED ----------|
     |                              |                           |
     |                              | 4. PATCH /trips/:id/start |
     |                              |-------------------------->|
     |                              |                           |
-    |<-------------------------------- IN_PROGRESS --------------|
+    |<-------------------------------- IN_PROGRESS -------------|
     |                              |                           |
     |                              | 5. PATCH /trips/:id/complete
     |                              |-------------------------->|
     |                              |                           |
-    |<-------------------------------- COMPLETED (con precio final)
+    |<-------------- COMPLETED (con precio final) ⚠️ BLOQUEADO -|
     |                              |                           |
 ```
 
+> ⚠️ **Nota:** El paso 5 (complete) está actualmente bloqueado porque MS07-PAYMENTS no está desarrollado.
+
 ### 4.3 Flujo Detallado
 
-**Paso 1: Solicitud de Viaje (Pasajero)**
+**Paso 1: Solicitud de Viaje (Pasajero)** ✅
 - El pasajero crea una solicitud de viaje con origen, destino y tipo de vehículo
-- El sistema calcula la ruta y el precio estimado
+- El sistema calcula la ruta y el precio estimado mediante MS06-PRICING y MS10-GEO
 - Estado resultante: `REQUESTED`
 
-**Paso 2: Aceptación del Viaje (Conductor)**
+**Paso 1.5: Oferta a Conductores (Sistema)** ✅
+- El sistema identifica conductores cercanos mediante MS03-DRIVER-SESSIONS
+- Se ofrece el viaje a conductores elegibles
+- Estado resultante: `OFFERED`
+
+**Paso 2: Aceptación del Viaje (Conductor)** ✅
 - Un conductor disponible acepta el viaje
-- El sistema valida la disponibilidad del conductor
+- El sistema valida la disponibilidad y elegibilidad del conductor
+- Se genera un PIN de 4 dígitos para verificación de seguridad
+- Se calcula el ETA del conductor al punto de recogida
 - Estado resultante: `ASSIGNED`
 
-**Paso 3: Verificación de PIN (Pasajero)**
-- El pasajero verifica su identidad mediante un PIN
-- El sistema valida el PIN contra el esperado
-- Estado resultante: Sin cambio, pero marca verificación
+**Paso 3: Verificación de PIN (Pasajero)** ✅
+- El pasajero ingresa el PIN mostrado en la app del conductor
+- El sistema valida el PIN contra el almacenado en Redis
+- **Importante:** Al verificar exitosamente, el estado cambia automáticamente
+- Estado resultante: `PICKUP_STARTED`
 
-**Paso 4: Inicio del Viaje (Conductor)**
-- El conductor inicia el viaje
+**Paso 4: Inicio del Viaje (Conductor)** ✅
+- El conductor marca el inicio del viaje cuando el pasajero ha abordado
+- Requiere que el trip esté en estado `PICKUP_STARTED` (PIN verificado)
 - El sistema registra la hora de inicio
 - Estado resultante: `IN_PROGRESS`
 
-**Paso 5: Finalización del Viaje (Conductor)**
+**Paso 5: Finalización del Viaje (Conductor)** ⚠️ BLOQUEADO
 - El conductor completa el viaje con distancia y tiempo reales
-- El sistema calcula el precio final
-- El sistema crea una intención de pago
-- Estado resultante: `COMPLETED`
+- El sistema calcula el precio final mediante MS06-PRICING
+- **⚠️ BLOQUEADO:** El sistema intenta crear una intención de pago en MS07-PAYMENTS (no desarrollado)
+- Estado resultante: `COMPLETED` (fallará hasta que MS07-PAYMENTS esté disponible)
+
+**Paso 6: Pago Procesado (Sistema)** ❌ NO DISPONIBLE
+- El sistema recibe el evento `payment.captured` de MS07-PAYMENTS
+- Estado resultante: `PAID`
 
 ---
 
@@ -505,7 +542,7 @@ PATCH /trips/550e8400-e29b-41d4-a716-446655440000/accept
 
 #### POST /trips/:id/pin/verify
 
-Verifica el código PIN del pasajero antes de iniciar el viaje.
+Verifica el código PIN del pasajero antes de iniciar el viaje. **Al verificar exitosamente, el estado del trip cambia automáticamente de `ASSIGNED` a `PICKUP_STARTED`.**
 
 **Método:** `POST`
 **URL:** `/trips/:id/pin/verify`
@@ -573,9 +610,13 @@ POST /trips/550e8400-e29b-41d4-a716-446655440000/pin/verify
 
 1. **Respuesta Siempre 200**: Incluso si el PIN es incorrecto, la respuesta HTTP es 200. El cliente debe verificar el campo `verified` en el body.
 
-2. **Límite de Intentos**: Después de 3 intentos fallidos, el sistema puede bloquear temporalmente las verificaciones (implementación pendiente).
+2. **Cambio de Estado Automático**: Si `verified: true`, el trip pasa automáticamente de `ASSIGNED` a `PICKUP_STARTED`. El frontend debe actualizar la UI acordemente.
 
-3. **Generación de PIN**: El PIN es generado automáticamente al crear el trip y enviado al pasajero por otros canales (SMS, notificación push).
+3. **Límite de Intentos**: Después de 5 intentos fallidos, el sistema bloquea las verificaciones para ese trip (error 400).
+
+4. **Generación de PIN**: El PIN de 4 dígitos es generado automáticamente al aceptar el viaje (`accept`) y tiene un TTL de 15 minutos. El pasajero lo ve en su app y se lo comunica al conductor.
+
+5. **Timer No-Show**: Al verificar el PIN exitosamente, se inicia un timer de 10 minutos para no-show del conductor.
 
 ---
 
@@ -636,32 +677,36 @@ PATCH /trips/550e8400-e29b-41d4-a716-446655440000/start
 #### Validaciones
 
 - El trip debe existir
-- El trip debe estar en estado `ASSIGNED`
-- El PIN debe haber sido verificado previamente
+- El trip debe estar en estado `PICKUP_STARTED` (el PIN ya fue verificado)
+- El conductor autenticado debe ser el asignado al trip
 
 #### Errores Comunes
 
-**Error 400 - PIN No Verificado:**
+**Error 400 - Estado Inválido (PIN no verificado):**
 ```json
 {
   "statusCode": 400,
-  "message": "PIN must be verified before starting trip",
+  "message": "Trip trip-123 must be in PICKUP_STARTED status to start, current status: ASSIGNED",
   "error": "Bad Request"
 }
 ```
 
-**Error 400 - Estado Inválido:**
+**Error 403 - Conductor No Asignado:**
 ```json
 {
-  "statusCode": 400,
-  "message": "Trip is not in ASSIGNED state",
-  "error": "Bad Request"
+  "statusCode": 403,
+  "message": "driver is not assigned to this trip",
+  "error": "Forbidden"
 }
 ```
 
 ---
 
 ### 5.6 Completar Viaje (Conductor)
+
+> ⚠️ **ENDPOINT ACTUALMENTE BLOQUEADO**
+>
+> Este endpoint fallará porque intenta crear una intención de pago en MS07-PAYMENTS, que aún no está desarrollado. El error será un timeout o 500 al intentar conectar con el servicio de pagos.
 
 #### PATCH /trips/:id/complete
 
@@ -1274,12 +1319,14 @@ Solicitar confirmación del usuario para acciones irreversibles:
 
 ```typescript
 enum TripStatus {
-  REQUESTED = 'REQUESTED',       // Viaje solicitado
-  ASSIGNED = 'ASSIGNED',         // Conductor asignado
-  IN_PROGRESS = 'IN_PROGRESS',   // Viaje en curso
-  COMPLETED = 'COMPLETED',       // Viaje completado
-  PAID = 'PAID',                 // Pago procesado
-  CANCELED = 'CANCELED'          // Viaje cancelado
+  REQUESTED = 'REQUESTED',           // Viaje solicitado por pasajero
+  OFFERED = 'OFFERED',               // Viaje ofrecido a conductores cercanos
+  ASSIGNED = 'ASSIGNED',             // Conductor asignado, PIN generado
+  PICKUP_STARTED = 'PICKUP_STARTED', // PIN verificado, conductor en punto de recogida
+  IN_PROGRESS = 'IN_PROGRESS',       // Viaje en curso
+  COMPLETED = 'COMPLETED',           // Viaje completado (⚠️ bloqueado por MS07-PAYMENTS)
+  PAID = 'PAID',                     // Pago procesado (❌ no disponible)
+  CANCELED = 'CANCELED'              // Viaje cancelado
 }
 ```
 
@@ -1338,9 +1385,19 @@ enum CancelSide {
 - **Documentación H3**: https://h3geo.org/
 - **Gateway Argo**: `argo-gateway/DOCUMENTACION_GATEWAY.md`
 - **MS02-AUTH**: Consultar guía de autenticación
-- **MS07-PAYMENTS**: Consultar guía de pagos
+- **MS07-PAYMENTS**: ⚠️ **AÚN NO DESARROLLADO** - Cuando esté disponible, consultar guía de pagos
 
-### 8.6 Flujo Completo de Ejemplo
+### 8.6 Estado de Dependencias
+
+| Microservicio | Estado | Impacto en Trips |
+|---------------|--------|------------------|
+| MS02-AUTH | ✅ Desplegado | Autenticación funcional |
+| MS03-DRIVER-SESSIONS | ✅ Desplegado | Validación de conductores funcional |
+| MS06-PRICING | ✅ Desplegado | Cotización y precio final funcional |
+| MS10-GEO | ✅ Desplegado | Rutas, ETA y H3 funcional |
+| MS07-PAYMENTS | ❌ No desarrollado | Bloquea `/complete` y estado `PAID` |
+
+### 8.7 Flujo Completo de Ejemplo
 
 A continuación, un ejemplo paso a paso de un flujo completo:
 
@@ -1448,5 +1505,6 @@ Para preguntas, dudas o reportar problemas con esta guía de integración:
 - **Equipo de Backend**: Pablo Toledo
 ---
 
-**Fecha**: Diciembre 2025
-**Versión**: 1.0.0
+**Fecha**: Enero 2026
+**Versión**: 1.2.0
+**Última revisión**: Actualización de estados del trip y documentación de bloqueo por MS07-PAYMENTS
