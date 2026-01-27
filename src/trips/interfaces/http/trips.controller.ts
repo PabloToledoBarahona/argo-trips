@@ -1,4 +1,4 @@
-import { Controller, Post, Patch, Body, Param } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { CreateTripDto, CreateTripResponseDto } from '../../application/create-trip/create-trip.dto.js';
 import { AcceptTripDto, AcceptTripResponseDto } from '../../application/accept-trip/accept-trip.dto.js';
 import { VerifyPinDto, VerifyPinResponseDto } from '../../application/verify-pin/verify-pin.dto.js';
@@ -12,6 +12,16 @@ import { TripsHttpHandler } from './trips.handler.js';
 @Controller('trips')
 export class TripsController {
   constructor(private readonly handler: TripsHttpHandler) {}
+
+  @Get()
+  async listTrips(@Query() query: Record<string, string | undefined>, @CurrentUser() user: ArgoUser) {
+    return this.handler.listTrips(query, user);
+  }
+
+  @Get(':id')
+  async getTrip(@Param('id') id: string, @CurrentUser() user: ArgoUser) {
+    return this.handler.getTrip(id, user);
+  }
 
   @Post()
   async createTrip(

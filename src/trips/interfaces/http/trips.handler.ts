@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { CreateTripUseCase } from '../../application/create-trip/create-trip.use-case.js';
 import { AcceptTripUseCase } from '../../application/accept-trip/accept-trip.use-case.js';
 import { VerifyPinUseCase } from '../../application/verify-pin/verify-pin.use-case.js';
@@ -13,6 +13,11 @@ import { CompleteTripDto, CompleteTripResponseDto } from '../../application/comp
 import { CancelTripDto, CancelTripResponseDto } from '../../application/cancel-trip/cancel-trip.dto.js';
 import type { ArgoUser } from '../../../shared/auth/types/argo-user.type.js';
 import { CancelSide } from '../../domain/enums/cancel-side.enum.js';
+import { TripStatus } from '../../domain/enums/trip-status.enum.js';
+import {
+  TripListFilters,
+  TripPrismaRepository,
+} from '../../infrastructure/persistence/prisma/trip-prisma.repository.js';
 import type { ActorContext } from '../../application/shared/actor-context.js';
 
 @Injectable()
@@ -24,6 +29,7 @@ export class TripsHttpHandler {
     private readonly startTripUseCase: StartTripUseCase,
     private readonly completeTripUseCase: CompleteTripUseCase,
     private readonly cancelTripUseCase: CancelTripUseCase,
+    private readonly tripRepository: TripPrismaRepository,
   ) {}
 
   async createTrip(
@@ -99,6 +105,34 @@ export class TripsHttpHandler {
       { ...dto, tripId: id },
       this.resolveActor(user),
     );
+  }
+
+  async getTrip(id: string, user: ArgoUser) {
+    this.assertRole(user, ['admin']);
+    const trip = await this.tripRepository.findById(id);
+    if (!trip) {
+      throw new NotFoundException(`Trip ${id} not found`);
+    }
+    return trip;
+  }
+
+  async listTrips(query: Record<string, string | undefined>, user: ArgoUser) {
+    this.assertRole(user, ['admin']);
+
+    const status = query.status && query.status in TripStatus ? (query.status as TripStatus) : undefined;
+
+    const filters: TripListFilters = {
+      status,
+      city: query.city,
+      driverId: query.driver_id,
+      riderId: query.rider_id,
+      from: query.from ? new Date(query.from) : undefined,
+      to: query.to ? new Date(query.to) : undefined,
+      page: query.page ? Number.parseInt(query.page, 10) : undefined,
+      limit: query.limit ? Number.parseInt(query.limit, 10) : undefined,
+    };
+
+    return this.tripRepository.findMany(filters);
   }
 
   private assertRole(user: ArgoUser, allowed: Array<'rider' | 'driver' | 'admin'>): void {

@@ -5,7 +5,25 @@ import { TripStatus } from '../../../domain/enums/trip-status.enum.js';
 import { CancelReason } from '../../../domain/enums/cancel-reason.enum.js';
 import { CancelSide } from '../../../domain/enums/cancel-side.enum.js';
 import { PaymentMethod } from '../../../domain/enums/payment-method.enum.js';
-import { Trip as PrismaTrip, TripStatus as PrismaTripStatus, TripCancelReason, TripCancelSide, PaymentMethod as PrismaPaymentMethod } from '@prisma/client';
+import {
+  PaymentMethod as PrismaPaymentMethod,
+  Prisma,
+  Trip as PrismaTrip,
+  TripCancelReason,
+  TripCancelSide,
+  TripStatus as PrismaTripStatus,
+} from '@prisma/client';
+
+export interface TripListFilters {
+  status?: TripStatus;
+  city?: string;
+  driverId?: string;
+  riderId?: string;
+  from?: Date;
+  to?: Date;
+  page?: number;
+  limit?: number;
+}
 
 @Injectable()
 export class TripPrismaRepository {
@@ -109,6 +127,49 @@ export class TripPrismaRepository {
     });
 
     return prismaTrips.map(trip => this.mapToDomain(trip));
+  }
+
+  async findMany(filters: TripListFilters): Promise<{ trips: Trip[]; total: number }> {
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limitRaw = filters.limit && filters.limit > 0 ? filters.limit : 20;
+    const limit = Math.min(limitRaw, 100);
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.TripWhereInput = {};
+
+    if (filters.status) {
+      where.status = filters.status as PrismaTripStatus;
+    }
+    if (filters.city) {
+      where.city = filters.city;
+    }
+    if (filters.driverId) {
+      where.driverId = filters.driverId;
+    }
+    if (filters.riderId) {
+      where.riderId = filters.riderId;
+    }
+    if (filters.from || filters.to) {
+      where.requestedAt = {
+        gte: filters.from,
+        lte: filters.to,
+      };
+    }
+
+    const [total, prismaTrips] = await this.prisma.$transaction([
+      this.prisma.trip.count({ where }),
+      this.prisma.trip.findMany({
+        where,
+        orderBy: { requestedAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+    ]);
+
+    return {
+      total,
+      trips: prismaTrips.map((trip) => this.mapToDomain(trip)),
+    };
   }
 
   private mapToDomain(prismaTrip: PrismaTrip): Trip {
