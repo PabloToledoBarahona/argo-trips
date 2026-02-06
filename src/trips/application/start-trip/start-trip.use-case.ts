@@ -1,10 +1,11 @@
-import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
 import { StartTripDto, StartTripResponseDto } from './start-trip.dto.js';
 import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/trip-prisma.repository.js';
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
 import { TimerService } from '../../infrastructure/redis/timer.service.js';
 import { TripStatus } from '../../domain/enums/trip-status.enum.js';
 import type { ActorContext } from '../shared/actor-context.js';
+import { ProfilesEligibilityClient } from '../../infrastructure/http-clients/profiles-eligibility.client.js';
 
 @Injectable()
 export class StartTripUseCase {
@@ -14,6 +15,7 @@ export class StartTripUseCase {
     private readonly tripRepository: TripPrismaRepository,
     private readonly auditRepository: TripAuditPrismaRepository,
     private readonly timerService: TimerService,
+    private readonly profilesEligibilityClient: ProfilesEligibilityClient,
   ) {}
 
   async execute(dto: StartTripDto, actor?: ActorContext): Promise<StartTripResponseDto> {
@@ -36,6 +38,27 @@ export class StartTripUseCase {
       throw new BadRequestException(
         `Trip ${dto.tripId} must be in PICKUP_STARTED status to start, current status: ${trip.status}`,
       );
+    }
+
+    // Hard gate: re-check eligibility before allowing the trip to start.
+    // This prevents a driver from starting a trip if they became ineligible after assignment.
+    if (actor?.role === 'driver') {
+      try {
+        const eligibility = await this.profilesEligibilityClient.recomputeEligibility(
+          trip.driverId!,
+        );
+        if (!eligibility.is_eligible) {
+          const code = eligibility.blocking_reasons?.[0]?.code || 'unknown';
+          throw new BadRequestException(
+            `Driver ${trip.driverId} is not eligible (profiles): ${code}`,
+          );
+        }
+      } catch (error) {
+        if (error instanceof BadRequestException) throw error;
+        throw new ServiceUnavailableException(
+          'Unable to verify driver eligibility',
+        );
+      }
     }
 
     // Transition to IN_PROGRESS
