@@ -29,6 +29,7 @@ MS04-TRIPS serves as the core orchestrator for trip management in the Argo ride-
 - Integration with pricing service for dynamic fare calculation
 - Geospatial operations via H3 indexing and geocoding
 - Driver session validation and assignment
+- Hard gate de elegibilidad (MS02 Profiles) antes de asignar e iniciar un viaje
 - Payment intent creation upon trip completion
 - Real-time trip state transitions with validation
 
