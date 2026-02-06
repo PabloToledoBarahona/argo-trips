@@ -203,6 +203,8 @@ PORT=3000
 NODE_ENV=production
 ```
 
+You can start from `./.env.example`.
+
 ### Required Secrets
 
 For production deployment, the following secrets should be stored in AWS Secrets Manager:
