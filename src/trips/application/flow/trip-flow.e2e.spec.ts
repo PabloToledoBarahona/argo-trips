@@ -158,6 +158,12 @@ class MockDriverSessionsClient {
   }
 }
 
+class MockProfilesEligibilityClient {
+  async recomputeEligibility(): Promise<{ is_eligible: boolean; blocking_reasons: any[] }> {
+    return { is_eligible: true, blocking_reasons: [] };
+  }
+}
+
 describe('Trips flow (in-memory integration)', () => {
   it('creates, assigns, verifies PIN, starts, and completes a trip', async () => {
     const tripRepository = new InMemoryTripRepository();
@@ -169,6 +175,7 @@ describe('Trips flow (in-memory integration)', () => {
     const pricingClient = new MockPricingClient();
     const paymentsClient = new MockPaymentsClient();
     const driverSessionsClient = new MockDriverSessionsClient();
+    const profilesEligibilityClient = new MockProfilesEligibilityClient();
 
     const createTrip = new CreateTripUseCase(
       tripRepository as any,
@@ -182,6 +189,7 @@ describe('Trips flow (in-memory integration)', () => {
       tripRepository as any,
       auditRepository as any,
       driverSessionsClient as any,
+      profilesEligibilityClient as any,
       geoClient as any,
       pinCache as any,
       timerService as any,

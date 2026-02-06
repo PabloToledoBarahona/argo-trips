@@ -3,6 +3,7 @@ import { AcceptTripDto, AcceptTripResponseDto } from './accept-trip.dto.js';
 import { TripPrismaRepository } from '../../infrastructure/persistence/prisma/trip-prisma.repository.js';
 import { TripAuditPrismaRepository } from '../../infrastructure/persistence/prisma/trip-audit-prisma.repository.js';
 import { DriverSessionsClient } from '../../infrastructure/http-clients/driver-sessions.client.js';
+import { ProfilesEligibilityClient } from '../../infrastructure/http-clients/profiles-eligibility.client.js';
 import { GeoClient } from '../../infrastructure/http-clients/geo.client.js';
 import { PinCacheService } from '../../infrastructure/redis/pin-cache.service.js';
 import { TimerService } from '../../infrastructure/redis/timer.service.js';
@@ -21,6 +22,7 @@ export class AcceptTripUseCase {
     private readonly tripRepository: TripPrismaRepository,
     private readonly auditRepository: TripAuditPrismaRepository,
     private readonly driverSessionsClient: DriverSessionsClient,
+    private readonly profilesEligibilityClient: ProfilesEligibilityClient,
     private readonly geoClient: GeoClient,
     private readonly pinCacheService: PinCacheService,
     private readonly timerService: TimerService,
@@ -57,6 +59,15 @@ export class AcceptTripUseCase {
     if (!driverSession.eligibility.ok) {
       throw new BadRequestException(
         `Driver ${dto.driverId} is not eligible: ${driverSession.eligibility.status}`,
+      );
+    }
+
+    // Hard gate: recompute eligibility directly from MS02 to avoid stale caches during assignment.
+    const eligibility = await this.profilesEligibilityClient.recomputeEligibility(dto.driverId);
+    if (!eligibility.is_eligible) {
+      const code = eligibility.blocking_reasons?.[0]?.code || 'unknown';
+      throw new BadRequestException(
+        `Driver ${dto.driverId} is not eligible (profiles): ${code}`,
       );
     }
 

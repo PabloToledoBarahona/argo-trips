@@ -190,6 +190,7 @@ PRICING_SERVICE_URL="http://gateway-url/pricing"
 GEO_SERVICE_URL="http://gateway-url/geo"
 DRIVER_SESSIONS_SERVICE_URL="http://gateway-url/driver-sessions"
 AUTH_SERVICE_URL="http://gateway-url/auth"
+PROFILES_SERVICE_URL="http://gateway-url/profiles"
 PAYMENTS_SERVICE_URL="http://gateway-url/payments"
 
 # Service Authentication

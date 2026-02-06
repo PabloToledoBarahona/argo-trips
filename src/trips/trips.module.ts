@@ -31,6 +31,7 @@ import { GeoClient } from './infrastructure/http-clients/geo.client.js';
 import { PricingClient } from './infrastructure/http-clients/pricing.client.js';
 import { PaymentsClient } from './infrastructure/http-clients/payments.client.js';
 import { DriverSessionsClient } from './infrastructure/http-clients/driver-sessions.client.js';
+import { ProfilesEligibilityClient } from './infrastructure/http-clients/profiles-eligibility.client.js';
 
 // Interfaces
 import { TripsController } from './interfaces/http/trips.controller.js';
@@ -77,6 +78,7 @@ import { TripEventsHandler } from '../shared/event-bus/trip-events.handler.js';
     PricingClient,
     PaymentsClient,
     DriverSessionsClient,
+    ProfilesEligibilityClient,
 
     // Interfaces
     TripsHttpHandler,
