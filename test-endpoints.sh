@@ -22,6 +22,11 @@ set -euo pipefail
 # Uso:
 #   ./test-endpoints.sh <JWT_TOKEN>
 #
+# Variables opcionales:
+#   GATEWAY_URL - Override del gateway
+#   DRIVER_ID   - Driver a usar para aceptar
+#   TRIP_PIN    - PIN real del viaje (para verify/start/complete)
+#
 # Ejemplo:
 #   ./test-endpoints.sh eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ###############################################################################
@@ -39,14 +44,16 @@ NC='\033[0m' # No Color
 # =============================================================================
 # Configuración
 # =============================================================================
-GATEWAY_URL="http://alb-argo-gateway-1317937741.us-east-2.elb.amazonaws.com"
+GATEWAY_URL="${GATEWAY_URL:-http://argo-shared-alb-828452645.us-east-2.elb.amazonaws.com}"
 BASE_URL="${GATEWAY_URL}/trips"
 JWT_TOKEN="${1:-}"
 
 # Datos de prueba
 RIDER_ID="rider-test-$(date +%s)"
-DRIVER_ID="driver-67890"
+DRIVER_ID=""
 TRIP_ID=""
+TRIP_ACCEPTED=0
+PIN_VERIFIED=0
 
 # Contadores
 TESTS_PASSED=0
@@ -70,12 +77,12 @@ print_test() {
 
 print_success() {
     echo -e "${GREEN}✅ PASS:${NC} $1"
-    ((TESTS_PASSED++))
+    TESTS_PASSED=$((TESTS_PASSED + 1))
 }
 
 print_error() {
     echo -e "${RED}❌ FAIL:${NC} $1"
-    ((TESTS_FAILED++))
+    TESTS_FAILED=$((TESTS_FAILED + 1))
 }
 
 print_warning() {
@@ -113,6 +120,20 @@ check_jwt() {
     fi
 
     print_info "JWT Token configurado: ${JWT_TOKEN:0:20}..."
+}
+
+resolve_driver_id() {
+    if [[ -n "$DRIVER_ID" ]]; then
+        return
+    fi
+
+    if [[ -f "/tmp/driver-token.json" ]]; then
+        DRIVER_ID=$(jq -r '.driver_id // empty' /tmp/driver-token.json)
+    fi
+
+    if [[ -z "$DRIVER_ID" ]]; then
+        DRIVER_ID="driver-67890"
+    fi
 }
 
 # =============================================================================
@@ -166,14 +187,15 @@ test_create_trip() {
 
     REQUEST_BODY='{
         "riderId": "'"$RIDER_ID"'",
-        "vehicleType": "sedan",
-        "city": "columbus",
-        "originLat": 39.9612,
-        "originLng": -82.9988,
-        "originH3Res9": "89284a8371fffff",
-        "destLat": 40.0067,
-        "destLng": -83.0305,
-        "destH3Res9": "89284a8b57fffff"
+        "vehicleType": "comfort",
+        "city": "SCZ",
+        "payment_method": "cash",
+        "originLat": -17.78345,
+        "originLng": -63.18117,
+        "originH3Res9": "898b221a42fffff",
+        "destLat": -17.79456,
+        "destLng": -63.19234,
+        "destH3Res9": "898b22c4b63ffff"
     }'
 
     RESPONSE=$(curl -s -w "\n%{http_code}" \
@@ -192,7 +214,7 @@ test_create_trip() {
         ESTIMATE=$(echo "$BODY" | jq -r '.estimateTotal // empty')
         QUOTE_ID=$(echo "$BODY" | jq -r '.quoteId // empty')
 
-        if [[ -n "$TRIP_ID" ]] && [[ "$STATUS" == "PENDING" ]]; then
+        if [[ -n "$TRIP_ID" ]] && [[ "$STATUS" == "REQUESTED" ]]; then
             print_success "Trip creado exitosamente: $TRIP_ID"
             print_info "Status: $STATUS"
             print_info "Estimate Total: \$$ESTIMATE"
@@ -237,8 +259,9 @@ test_accept_trip() {
         STATUS=$(echo "$BODY" | jq -r '.status // empty')
         DRIVER=$(echo "$BODY" | jq -r '.driverId // empty')
 
-        if [[ "$STATUS" == "ACCEPTED" ]] && [[ "$DRIVER" == "$DRIVER_ID" ]]; then
+        if [[ "$STATUS" == "ASSIGNED" ]] && [[ "$DRIVER" == "$DRIVER_ID" ]]; then
             print_success "Trip aceptado por driver: $DRIVER"
+            TRIP_ACCEPTED=1
             echo "$BODY" | jq '.'
         else
             print_error "Response inválido: $BODY"
@@ -259,15 +282,20 @@ test_accept_trip() {
 # =============================================================================
 
 test_verify_pin() {
-    if [[ -z "$TRIP_ID" ]]; then
+    if [[ -z "$TRIP_ID" ]] || [[ "$TRIP_ACCEPTED" -ne 1 ]]; then
         print_warning "Trip ID no disponible, saltando test de verify PIN"
+        return
+    fi
+
+    if [[ -z "${TRIP_PIN:-}" ]]; then
+        print_warning "TRIP_PIN no configurado; no se intentará verificar para evitar bloqueos"
         return
     fi
 
     print_test "Verificar PIN (POST /trips/$TRIP_ID/pin/verify)"
 
     REQUEST_BODY='{
-        "pin": "1234"
+        "pin": "'"$TRIP_PIN"'"
     }'
 
     RESPONSE=$(curl -s -w "\n%{http_code}" \
@@ -285,6 +313,7 @@ test_verify_pin() {
 
         if [[ "$VERIFIED" == "true" ]]; then
             print_success "PIN verificado correctamente"
+            PIN_VERIFIED=1
             echo "$BODY" | jq '.'
         else
             print_error "PIN inválido"
@@ -300,7 +329,7 @@ test_verify_pin() {
 # =============================================================================
 
 test_start_trip() {
-    if [[ -z "$TRIP_ID" ]]; then
+    if [[ -z "$TRIP_ID" ]] || [[ "$PIN_VERIFIED" -ne 1 ]]; then
         print_warning "Trip ID no disponible, saltando test de start"
         return
     fi
@@ -335,7 +364,7 @@ test_start_trip() {
 # =============================================================================
 
 test_complete_trip() {
-    if [[ -z "$TRIP_ID" ]]; then
+    if [[ -z "$TRIP_ID" ]] || [[ "$PIN_VERIFIED" -ne 1 ]]; then
         print_warning "Trip ID no disponible, saltando test de complete"
         return
     fi
@@ -386,14 +415,15 @@ test_cancel_trip() {
     # Crear nuevo trip para cancelar
     REQUEST_BODY='{
         "riderId": "'"$RIDER_ID"'",
-        "vehicleType": "sedan",
-        "city": "columbus",
-        "originLat": 39.9612,
-        "originLng": -82.9988,
-        "originH3Res9": "89284a8371fffff",
-        "destLat": 40.0067,
-        "destLng": -83.0305,
-        "destH3Res9": "89284a8b57fffff"
+        "vehicleType": "comfort",
+        "city": "SCZ",
+        "payment_method": "cash",
+        "originLat": -17.78345,
+        "originLng": -63.18117,
+        "originH3Res9": "898b221a42fffff",
+        "destLat": -17.79456,
+        "destLng": -63.19234,
+        "destH3Res9": "898b22c4b63ffff"
     }'
 
     RESPONSE=$(curl -s -w "\n%{http_code}" \
@@ -437,7 +467,7 @@ test_cancel_trip() {
         STATUS=$(echo "$BODY" | jq -r '.status // empty')
         CANCEL_REASON=$(echo "$BODY" | jq -r '.cancelReason // empty')
 
-        if [[ "$STATUS" == "CANCELLED" ]] && [[ "$CANCEL_REASON" == "RIDER_CANCELLED" ]]; then
+        if [[ "$STATUS" == "CANCELED" ]] && [[ "$CANCEL_REASON" == "RIDER_CANCELLED" ]]; then
             print_success "Trip cancelado exitosamente"
             echo "$BODY" | jq '.'
         else
@@ -456,14 +486,15 @@ test_cancel_trip() {
 main() {
     print_header "🧪 MS04-TRIPS - Production API Testing"
 
+    # Verificar dependencias
+    check_dependencies
+    check_jwt
+    resolve_driver_id
+
     print_info "Gateway URL: $GATEWAY_URL"
     print_info "Base URL: $BASE_URL"
     print_info "Rider ID: $RIDER_ID"
     print_info "Driver ID: $DRIVER_ID"
-
-    # Verificar dependencias
-    check_dependencies
-    check_jwt
 
     # Health checks (no requieren autenticación)
     print_header "📊 Health Checks"

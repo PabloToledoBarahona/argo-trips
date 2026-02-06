@@ -54,10 +54,13 @@ export class HealthController {
   @Get('health')
   @HealthCheck()
   async check() {
-    return this.health.check([
-      // Database health check
-      () => this.prismaHealth.pingCheck('database', this.prisma),
-    ]);
+    return this.runHealthCheck();
+  }
+
+  @Get('trips/health')
+  @HealthCheck()
+  async tripsHealth() {
+    return this.runHealthCheck();
   }
 
   /**
@@ -76,6 +79,22 @@ export class HealthController {
    */
   @Get('healthz')
   healthz() {
+    return this.buildHealthzPayload();
+  }
+
+  @Get('trips/healthz')
+  tripsHealthz() {
+    return this.buildHealthzPayload();
+  }
+
+  private runHealthCheck() {
+    return this.health.check([
+      // Database health check
+      () => this.prismaHealth.pingCheck('database', this.prisma),
+    ]);
+  }
+
+  private buildHealthzPayload() {
     return {
       status: 'healthy',
       service: 'argo-trips',
