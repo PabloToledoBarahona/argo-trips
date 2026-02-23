@@ -202,6 +202,24 @@ describe('CreateTripUseCase', () => {
 
       // Assertions
       expect(result).toBeDefined();
+      expect(result.trip_id).toBe('trip-123');
+      expect(result.origin_h3_res9).toBe(dto.originH3Res9);
+      expect(result.vehicle_type).toBe('economy');
+      expect(result.origin).toEqual({
+        lat: dto.originLat,
+        lng: dto.originLng,
+        h3_res9: dto.originH3Res9,
+      });
+      expect(result.destination).toEqual({
+        lat: dto.destLat,
+        lng: dto.destLng,
+        h3_res9: dto.destH3Res9,
+      });
+      expect(result.distance_m_est).toBe(5000);
+      expect(result.duration_s_est).toBe(600);
+      expect(result.estimate_total).toBe(mockQuoteResponse.estimate_total);
+      expect(result.currency).toBe(mockQuoteResponse.currency);
+
       expect(result.id).toBe('trip-123');
       expect(result.status).toBe(TripStatus.REQUESTED);
       expect(result.riderId).toBe(dto.riderId);

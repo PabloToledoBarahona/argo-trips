@@ -132,7 +132,25 @@ export class PricingBreakdownDto {
   }[];
 }
 
+export class TripEstimatePointDto {
+  lat: number;
+  lng: number;
+  h3_res9?: string;
+}
+
 export class CreateTripResponseDto {
+  // New response contract (snake_case)
+  trip_id: string;
+  origin_h3_res9: string;
+  vehicle_type: string;
+  origin: TripEstimatePointDto;
+  destination: TripEstimatePointDto;
+  distance_m_est: number;
+  duration_s_est: number;
+  estimate_total: number;
+  currency: string;
+
+  // Legacy fields kept for backward compatibility
   id: string;
   status: string;
   riderId: string;
@@ -143,7 +161,6 @@ export class CreateTripResponseDto {
   estimateTotal: number;
   basePrice: number;
   surgeMultiplier: number;
-  currency: string;
   breakdown: PricingBreakdownDto;
   distanceMeters?: number;
   durationSeconds?: number;

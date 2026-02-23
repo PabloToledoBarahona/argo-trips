@@ -151,6 +151,18 @@ export class CreateTripUseCase {
       );
     }
 
+    const resolvedDistanceMeters =
+      distanceMeters ??
+      (quoteResponse.breakdown
+        ? Math.round(quoteResponse.breakdown.per_km.distance_km * 1000)
+        : 0);
+
+    const resolvedDurationSeconds =
+      durationSeconds ??
+      (quoteResponse.breakdown
+        ? Math.round(quoteResponse.breakdown.per_min.duration_min * 60)
+        : 0);
+
     // Create Trip entity
     const trip = new Trip({
       id: tripId,
@@ -169,8 +181,8 @@ export class CreateTripUseCase {
       destH3Res7,
       requestedAt: new Date(),
       quoteId: quoteResponse.quote_id,
-      distance_m_est: distanceMeters,
-      duration_s_est: durationSeconds,
+      distance_m_est: resolvedDistanceMeters,
+      duration_s_est: resolvedDurationSeconds,
       pricingSnapshot: this.buildQuoteSnapshot(quoteResponse),
     });
 
@@ -220,6 +232,26 @@ export class CreateTripUseCase {
     });
 
     return {
+      // New response contract (snake_case)
+      trip_id: savedTrip.id,
+      origin_h3_res9: savedTrip.originH3Res9,
+      vehicle_type: savedTrip.vehicleType,
+      origin: {
+        lat: savedTrip.originLat,
+        lng: savedTrip.originLng,
+        h3_res9: savedTrip.originH3Res9,
+      },
+      destination: {
+        lat: savedTrip.destLat,
+        lng: savedTrip.destLng,
+        h3_res9: savedTrip.destH3Res9,
+      },
+      distance_m_est: resolvedDistanceMeters,
+      duration_s_est: resolvedDurationSeconds,
+      estimate_total: quoteResponse.estimate_total,
+      currency: quoteResponse.currency,
+
+      // Legacy response contract (camelCase) - backward compatibility
       id: savedTrip.id,
       status: savedTrip.status,
       riderId: savedTrip.riderId,
@@ -230,10 +262,9 @@ export class CreateTripUseCase {
       estimateTotal: quoteResponse.estimate_total,
       basePrice: quoteResponse.breakdown?.base ?? 0,
       surgeMultiplier: quoteResponse.zone.surge,
-      currency: quoteResponse.currency,
       breakdown: this.buildBreakdownDto(quoteResponse),
-      distanceMeters,
-      durationSeconds,
+      distanceMeters: resolvedDistanceMeters,
+      durationSeconds: resolvedDurationSeconds,
       degradation: quoteResponse.degradation,
     };
   }

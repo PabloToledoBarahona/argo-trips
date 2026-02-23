@@ -296,7 +296,21 @@ For detailed testing instructions, see [TESTING.md](./TESTING.md).
   - **Request**: `{ riderId, vehicleType, city, paymentMethod|payment_method|payment_channel, originLat, originLng, destLat, destLng, originH3Res9?, destH3Res9? }`
   - **Required Fields**: All fields except `originH3Res9` and `destH3Res9`. If H3 indices are omitted, MS10-GEO must be available.
   - **Payment Method**: Must be `"cash"` or `"qr"`
-  - **Response**: Trip details with pricing quote and payment method
+  - **Response (actual contract)**:
+    ```json
+    {
+      "trip_id": "trp_123",
+      "origin_h3_res9": "89a8102b537ffff",
+      "vehicle_type": "economy",
+      "origin": { "lat": -17.78345, "lng": -63.18117, "h3_res9": "89a8102b537ffff" },
+      "destination": { "lat": -17.79456, "lng": -63.19234, "h3_res9": "89a8102a63bffff" },
+      "distance_m_est": 3300,
+      "duration_s_est": 620,
+      "estimate_total": 22.5,
+      "currency": "BOB"
+    }
+    ```
+  - **Compatibility**: Also includes legacy camelCase fields during migration (`id`, `vehicleType`, `estimateTotal`, etc.).
 
 - `PATCH /trips/:id/accept` - Driver accepts trip
   - **Request**: `{ driverId }`
