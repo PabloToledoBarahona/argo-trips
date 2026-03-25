@@ -108,10 +108,15 @@ export class TripsHttpHandler {
   }
 
   async getTrip(id: string, user: ArgoUser) {
-    this.assertRole(user, ['admin']);
+    this.assertRole(user, ['admin', 'driver', 'rider']);
     const trip = await this.tripRepository.findById(id);
     if (!trip) {
       throw new NotFoundException(`Trip ${id} not found`);
+    }
+    const isAdmin = user.roles.includes('admin');
+    const isParticipant = trip.riderId === user.sub || trip.driverId === user.sub;
+    if (!isAdmin && !isParticipant) {
+      throw new ForbiddenException('No tienes acceso a este viaje');
     }
     return trip;
   }
