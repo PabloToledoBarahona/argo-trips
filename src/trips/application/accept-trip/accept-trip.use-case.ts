@@ -162,7 +162,6 @@ export class AcceptTripUseCase {
       status: updatedTrip.status,
       driverId: updatedTrip.driverId!,
       assignedAt: updatedTrip.assignedAt!,
-      pin,
     };
   }
 

@@ -41,9 +41,15 @@ class InMemoryAuditRepository {
 
 class InMemoryPinCacheService {
   private readonly pins = new Map<string, string>();
+  private readonly displayPins = new Map<string, string>();
 
   async setPin(tripId: string, pin: string): Promise<void> {
     this.pins.set(tripId, pin);
+    this.displayPins.set(tripId, pin);
+  }
+
+  async getDisplayPin(tripId: string): Promise<string | null> {
+    return this.displayPins.get(tripId) ?? null;
   }
 
   async validatePin(tripId: string, pin: string): Promise<boolean> {
@@ -56,6 +62,7 @@ class InMemoryPinCacheService {
 
   async clearPin(tripId: string): Promise<void> {
     this.pins.delete(tripId);
+    this.displayPins.delete(tripId);
   }
 
   getPin(tripId: string): string | undefined {
@@ -238,9 +245,13 @@ describe('Trips flow (in-memory integration)', () => {
     });
 
     expect(acceptResponse.status).toBe(TripStatus.ASSIGNED);
+    // Driver must NOT receive the PIN in the acceptTrip response
+    expect((acceptResponse as any).pin).toBeUndefined();
 
     const pin = pinCache.getPin(createResponse.id);
     expect(pin).toBeTruthy();
+    // PIN must be available via display cache for the rider
+    await expect(pinCache.getDisplayPin(createResponse.id)).resolves.toBe(pin);
 
     const verifyResponse = await verifyPin.execute({
       tripId: createResponse.id,
@@ -266,5 +277,20 @@ describe('Trips flow (in-memory integration)', () => {
       'trip.assigned',
       'trip.completed',
     ]);
+
+    // trip.assigned event must carry PIN so notification service can push it to the rider
+    const assignedEvent = eventBus.events.find((e) => e.type === 'trip.assigned');
+    expect(assignedEvent?.data.pin).toBeTruthy();
+  });
+
+  it('clearPin removes display pin', async () => {
+    const pinCache = new InMemoryPinCacheService();
+    const tripId = 'trip-clear-test';
+
+    await pinCache.setPin(tripId, '1234');
+    await expect(pinCache.getDisplayPin(tripId)).resolves.toBe('1234');
+
+    await pinCache.clearPin(tripId);
+    await expect(pinCache.getDisplayPin(tripId)).resolves.toBeNull();
   });
 });
