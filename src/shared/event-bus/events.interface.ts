@@ -59,6 +59,7 @@ export interface TripAssignedEvent extends BaseEvent {
     vehicleType: string;
     city: string;
     estimatedArrivalMinutes: number;
+    pin: string;
   };
 }
 
