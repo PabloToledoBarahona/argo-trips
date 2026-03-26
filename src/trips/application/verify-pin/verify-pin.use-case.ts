@@ -32,6 +32,12 @@ export class VerifyPinUseCase {
       throw new ForbiddenException('rider is not assigned to this trip');
     }
 
+    if (actor?.role === 'driver') {
+      if (!trip.driverId || actor.id !== trip.driverId) {
+        throw new ForbiddenException('driver is not assigned to this trip');
+      }
+    }
+
     // Validate trip is in ASSIGNED status
     if (trip.status !== TripStatus.ASSIGNED) {
       throw new BadRequestException(
@@ -77,8 +83,8 @@ export class VerifyPinUseCase {
     await this.auditRepository.create({
       tripId: trip.id,
       action: `Status changed from ${TripStatus.ASSIGNED} to ${TripStatus.PICKUP_STARTED}`,
-      actorType: 'rider',
-      actorId: trip.riderId,
+      actorType: actor?.role ?? 'driver',
+      actorId: actor?.id ?? trip.driverId ?? trip.riderId,
       payload: {
         previousStatus: TripStatus.ASSIGNED,
         newStatus: TripStatus.PICKUP_STARTED,

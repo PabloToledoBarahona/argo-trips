@@ -316,7 +316,7 @@ For detailed testing instructions, see [TESTING.md](./TESTING.md).
   - **Request**: `{ driverId }`
   - **Response**: Updated trip with driver assignment
 
-- `POST /trips/:id/pin/verify` - Verify rider PIN
+- `POST /trips/:id/pin/verify` - Driver verifies rider PIN at origin
   - **Request**: `{ pin }`
   - **Response**: Verification status
 

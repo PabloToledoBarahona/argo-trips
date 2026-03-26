@@ -60,7 +60,7 @@ export class TripsHttpHandler {
     dto: Omit<VerifyPinDto, 'tripId'>,
     user: ArgoUser,
   ): Promise<VerifyPinResponseDto> {
-    this.assertRole(user, ['rider', 'admin']);
+    this.assertRole(user, ['driver', 'admin']);
     return await this.verifyPinUseCase.execute(
       { ...dto, tripId: id },
       this.resolveActor(user),

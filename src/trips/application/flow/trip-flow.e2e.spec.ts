@@ -253,10 +253,13 @@ describe('Trips flow (in-memory integration)', () => {
     // PIN must be available via display cache for the rider
     await expect(pinCache.getDisplayPin(createResponse.id)).resolves.toBe(pin);
 
-    const verifyResponse = await verifyPin.execute({
-      tripId: createResponse.id,
-      pin: pin || '0000',
-    });
+    const verifyResponse = await verifyPin.execute(
+      {
+        tripId: createResponse.id,
+        pin: pin || '0000',
+      },
+      { id: 'driver-1', role: 'driver' },
+    );
 
     expect(verifyResponse.verified).toBe(true);
 
