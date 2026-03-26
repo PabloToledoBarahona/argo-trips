@@ -15,4 +15,5 @@ export class AcceptTripResponseDto {
   status: string;
   driverId: string;
   assignedAt: Date;
+  pin: string;
 }

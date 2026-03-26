@@ -143,7 +143,7 @@ export class AcceptTripUseCase {
       `Trip ${trip.id} accepted by driver ${dto.driverId}, ETA: ${etaSeconds}s (${etaDistance}m)`,
     );
 
-    // Publish trip.assigned event to Event Bus
+    // Publish trip.assigned event to Event Bus (include PIN so notification service can push it to rider)
     await this.eventBus.publishTripEvent({
       type: 'trip.assigned',
       data: {
@@ -153,6 +153,7 @@ export class AcceptTripUseCase {
         vehicleType: updatedTrip.vehicleType,
         city: updatedTrip.city,
         estimatedArrivalMinutes: Math.ceil(etaSeconds / 60),
+        pin,
       },
     });
 
@@ -161,6 +162,7 @@ export class AcceptTripUseCase {
       status: updatedTrip.status,
       driverId: updatedTrip.driverId!,
       assignedAt: updatedTrip.assignedAt!,
+      pin,
     };
   }
 

@@ -71,6 +71,9 @@ export class PinCacheService {
       const storedValue = `${salt}:${hash}`;
       await this.redisService.set(pinKey, storedValue, ttlSeconds);
 
+      // Store plain PIN for rider display (same TTL)
+      await this.redisService.set(`trip:${tripId}:pin:display`, pin, ttlSeconds);
+
       // Clear any existing attempts and blocked status
       await this.clearAttempts(tripId);
 
@@ -79,6 +82,14 @@ export class PinCacheService {
       this.logger.error(`Failed to set PIN for trip ${tripId}`, error);
       throw error;
     }
+  }
+
+  /**
+   * Get the plain PIN for rider display.
+   * Returns null if the PIN has expired or was already cleared.
+   */
+  async getDisplayPin(tripId: string): Promise<string | null> {
+    return this.redisService.get(`trip:${tripId}:pin:display`);
   }
 
   /**
@@ -187,6 +198,7 @@ export class PinCacheService {
 
       await Promise.all([
         this.redisService.del(pinKey),
+        this.redisService.del(`trip:${tripId}:pin:display`),
         this.redisService.del(attemptsKey),
         this.redisService.del(blockedKey),
       ]);

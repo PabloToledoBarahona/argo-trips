@@ -19,6 +19,7 @@ import {
   TripPrismaRepository,
 } from '../../infrastructure/persistence/prisma/trip-prisma.repository.js';
 import type { ActorContext } from '../../application/shared/actor-context.js';
+import { PinCacheService } from '../../infrastructure/redis/pin-cache.service.js';
 
 @Injectable()
 export class TripsHttpHandler {
@@ -30,6 +31,7 @@ export class TripsHttpHandler {
     private readonly completeTripUseCase: CompleteTripUseCase,
     private readonly cancelTripUseCase: CancelTripUseCase,
     private readonly tripRepository: TripPrismaRepository,
+    private readonly pinCacheService: PinCacheService,
   ) {}
 
   async createTrip(
@@ -117,6 +119,12 @@ export class TripsHttpHandler {
     const isParticipant = trip.riderId === user.sub || trip.driverId === user.sub;
     if (!isAdmin && !isParticipant) {
       throw new ForbiddenException('No tienes acceso a este viaje');
+    }
+    // Riders receive the PIN so they can share it verbally with the driver
+    const isRider = user.roles.includes('rider') && trip.riderId === user.sub;
+    if (isRider) {
+      const pin = await this.pinCacheService.getDisplayPin(id);
+      return { ...trip, pin: pin ?? undefined };
     }
     return trip;
   }
