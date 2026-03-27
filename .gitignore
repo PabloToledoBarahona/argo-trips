@@ -68,6 +68,7 @@ prisma/*.db-journal
 .aws
 *.pem
 task-def-*.json
+taskdef*.json
 
 # Misc
 .eslintcache

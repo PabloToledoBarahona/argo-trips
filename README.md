@@ -320,6 +320,15 @@ For detailed testing instructions, see [TESTING.md](./TESTING.md).
   - **Request**: `{ pin }`
   - **Response**: Verification status
 
+## Actualización técnica (2026-03-27) - Verificación de PIN por driver asignado
+
+- `POST /trips/:id/pin/verify` quedó alineado con el flujo real de negocio:
+  - el actor correcto es el `driver` asignado al viaje
+  - un driver no asignado recibe `403`
+  - la auditoría registra el actor real que verificó el PIN
+- Se agregó cobertura unitaria e integración para evitar regresiones en el cambio de actor.
+- También se alineó persistencia de `originH3Res7` en Prisma para que el finalize de pricing use el H3 res7 correcto al completar el viaje.
+
 - `PATCH /trips/:id/start` - Start trip
   - **Response**: Trip status updated to IN_PROGRESS
 

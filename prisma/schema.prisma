@@ -61,7 +61,8 @@ model Trip {
 
   originLat    Float  @map("origin_lat")
   originLng    Float  @map("origin_lng")
-  originH3Res9 String @map("origin_h3_res9")
+  originH3Res9 String  @map("origin_h3_res9")
+  originH3Res7 String? @map("origin_h3_res7")
 
   destLat    Float  @map("dest_lat")
   destLng    Float  @map("dest_lng")
